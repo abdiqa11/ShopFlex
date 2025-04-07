@@ -1,20 +1,38 @@
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
+
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 
 export default function CreateStoreScreen() {
-  // Local state to hold user input
   const [storeName, setStoreName] = useState('');
   const [description, setDescription] = useState('');
   const [contact, setContact] = useState('');
 
-  // Placeholder for what happens when user presses "Create"
-  const handleCreateStore = () => {
-    console.log('Store created:', {
-      storeName,
-      description,
-      contact,
-    });
-    alert(`🎉 Store "${storeName}" created!`);
+  const handleCreateStore = async () => {
+    if (!storeName || !description || !contact) {
+      Alert.alert('Please fill in all fields');
+      return;
+    }
+
+    try {
+      const docRef = await addDoc(collection(db, 'stores'), {
+        storeName,
+        description,
+        contact,
+        createdAt: new Date(),
+      });
+      console.log('✅ Store saved with ID:', docRef.id);
+      Alert.alert(`🎉 Store "${storeName}" created!`);
+
+      // Clear form after saving
+      setStoreName('');
+      setDescription('');
+      setContact('');
+    } catch (error) {
+      console.error('🔥 Error saving store:', error.message);
+      Alert.alert('Saving failed', error.message);
+    }
   };
 
   return (

@@ -1,4 +1,3 @@
-// app/(tabs)/_layout.js
 import { Tabs } from 'expo-router';
 
 export default function TabLayout() {
