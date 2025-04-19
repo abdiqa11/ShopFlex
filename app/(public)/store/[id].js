@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image, ScrollView, Pressable } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image, ScrollView, Pressable, TouchableOpacity } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../services/firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { useCart } from '../../../context/CartContext';
 
 export default function StoreDetail() {
   const { id } = useLocalSearchParams();
   const [store, setStore] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { addToCart, getItemsCount } = useCart();
 
   useEffect(() => {
     if (id) {
@@ -68,6 +70,30 @@ export default function StoreDetail() {
     }
   };
 
+  const handleAddToCart = (product) => {
+    const cartItem = {
+      productId: product.id,
+      storeId: store.id,
+      storeName: store.name || 'Unknown Store',
+      name: product.name || 'Unnamed Product',
+      price: parseFloat(product.price || 0),
+      imageUrl: product.imageUrl,
+      quantity: 1
+    };
+    
+    addToCart(cartItem);
+    
+    Toast.show({
+      type: 'success',
+      text1: 'Added to Cart',
+      text2: `${product.name || 'Product'} added to your cart`
+    });
+  };
+
+  const handleGoToCart = () => {
+    router.push('/(public)/cart');
+  };
+
   const renderProduct = ({ item }) => (
     <View style={styles.productCard}>
       <View style={styles.productImageContainer}>
@@ -87,6 +113,14 @@ export default function StoreDetail() {
         <Text style={styles.productDescription} numberOfLines={2}>
           {item.description || 'No description available'}
         </Text>
+        
+        <TouchableOpacity 
+          style={styles.addToCartButton}
+          onPress={() => handleAddToCart(item)}
+        >
+          <Ionicons name="cart-outline" size={16} color="white" />
+          <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -109,8 +143,23 @@ export default function StoreDetail() {
     );
   }
 
+  const cartItemsCount = getItemsCount();
+
   return (
     <View style={styles.container}>
+      {/* Cart Button */}
+      {cartItemsCount > 0 && (
+        <TouchableOpacity 
+          style={styles.cartButton}
+          onPress={handleGoToCart}
+        >
+          <Ionicons name="cart" size={24} color="white" />
+          <View style={styles.cartBadge}>
+            <Text style={styles.cartBadgeText}>{cartItemsCount}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+      
       <ScrollView 
         style={styles.storeContainer}
         contentContainerStyle={styles.storeContent}
@@ -270,7 +319,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     flexDirection: 'row',
-    height: 120,
+    height: 150, // Increased height to accommodate button
   },
   productImageContainer: {
     width: 120,
@@ -292,7 +341,7 @@ const styles = StyleSheet.create({
   productInfo: {
     flex: 1,
     padding: 12,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
   productName: {
     fontSize: 16,
@@ -309,6 +358,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  addToCartButton: {
+    backgroundColor: '#4CAF50',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  addToCartButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
   emptyProducts: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -320,5 +384,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginTop: 12,
+  },
+  cartButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    backgroundColor: '#007AFF',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  cartBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 }); 

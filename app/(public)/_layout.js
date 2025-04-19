@@ -25,6 +25,18 @@ export default function PublicLayout() {
           presentation: 'card',
         }}
       />
+      <Stack.Screen
+        name="cart"
+        options={{
+          title: "Shopping Cart",
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+          headerTintColor: '#007AFF',
+          presentation: 'card',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 } 
