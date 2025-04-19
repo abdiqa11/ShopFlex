@@ -3,7 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Leave appspot.com here for the config (DO NOT remove it)
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCHlQOeMY0I_8sPMOpbNHn0jcvRomMjXqQ",
   authDomain: "shopflex-5e1e2.firebaseapp.com",
@@ -15,9 +15,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// ✅ EXPLICITLY tell Firebase what bucket to upload to
+// Initialize Firebase services
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app, "gs://shopflex-5e1e2.firebasestorage.app"); // 👈 This is the actual upload bucket
+// Use the gs:// URL format for the storage bucket
+const storage = getStorage(app, "gs://shopflex-5e1e2.appspot.com");
+
+// Log for debugging purposes
+console.log("Firebase Storage bucket configured:", storage.app.options.storageBucket);
 
 export { auth, db, storage };

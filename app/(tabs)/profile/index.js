@@ -136,18 +136,29 @@ export default function Profile() {
                 {stores.length === 0 ? (
                     <Text style={styles.emptyText}>No stores yet</Text>
                 ) : (
-                    stores.map(store => (
+                    <View>
+                        {stores.map(store => (
+                            <Pressable
+                                key={store.id}
+                                style={styles.storeItem}
+                                onPress={() => handleStorePress(store.id)}
+                            >
+                                <Text style={styles.storeName}>{store.name}</Text>
+                                <Text style={styles.storeDescription} numberOfLines={2}>
+                                    {store.description}
+                                </Text>
+                            </Pressable>
+                        ))}
+                        
+                        {/* View Public Store Button */}
                         <Pressable
-                            key={store.id}
-                            style={styles.storeItem}
-                            onPress={() => handleStorePress(store.id)}
+                            style={styles.viewPublicButton}
+                            onPress={() => router.push(`/(public)/store/${stores[0].id}`)}
                         >
-                            <Text style={styles.storeName}>{store.name}</Text>
-                            <Text style={styles.storeDescription} numberOfLines={2}>
-                                {store.description}
-                            </Text>
+                            <Ionicons name="eye-outline" size={24} color="white" />
+                            <Text style={styles.viewPublicButtonText}>View My Public Store</Text>
                         </Pressable>
-                    ))
+                    </View>
                 )}
                 <Pressable
                     style={styles.addButton}
@@ -257,5 +268,20 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 16,
         fontWeight: '600',
+    },
+    viewPublicButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#34C759',
+        padding: 12,
+        borderRadius: 8,
+        marginVertical: 12,
+    },
+    viewPublicButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 8,
     },
 }); 
