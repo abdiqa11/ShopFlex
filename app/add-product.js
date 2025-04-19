@@ -6,14 +6,15 @@ import { db, auth } from '../services/firebaseConfig';
 import { ImageUpload } from '../components/ImageUpload';
 import Toast from 'react-native-toast-message';
 
-export default function CreateStore() {
+export default function AddProduct() {
     const [name, setName] = useState('');
+    const [price, setPrice] = useState('');
     const [description, setDescription] = useState('');
     const [imageUrl, setImageUrl] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleCreateStore = async () => {
-        if (!name || !description) {
+    const handleAddProduct = async () => {
+        if (!name || !price || !description) {
             Toast.show({
                 type: 'error',
                 text1: 'Error',
@@ -22,42 +23,37 @@ export default function CreateStore() {
             return;
         }
 
-        // Check if user is logged in
-        const user = auth.currentUser;
-        if (!user) {
-            console.error('User not logged in');
-            Toast.show({
-                type: 'error',
-                text1: 'Error',
-                text2: 'You must be logged in to create a store'
-            });
-            router.push('/signin');
-            return;
-        }
-        
         setLoading(true);
         try {
-            await addDoc(collection(db, 'stores'), {
+            await addDoc(collection(db, 'products'), {
                 name,
+                price: parseFloat(price),
                 description,
                 imageUrl,
                 createdAt: new Date(),
-                ownerId: user.uid
+                userId: auth.currentUser?.uid
             });
             
             Toast.show({
                 type: 'success',
                 text1: 'Success',
-                text2: 'Store created successfully'
+                text2: 'Product added successfully'
             });
             
-            router.back();
+            // Reset form
+            setName('');
+            setPrice('');
+            setDescription('');
+            setImageUrl('');
+            
+            // Navigate to products list
+            router.push('/products');
         } catch (error) {
-            console.error('Error creating store:', error);
+            console.error('Error adding product:', error);
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: 'Failed to create store'
+                text2: 'Failed to add product'
             });
         } finally {
             setLoading(false);
@@ -66,19 +62,26 @@ export default function CreateStore() {
 
     return (
         <ScrollView style={styles.container}>
-            <Text style={styles.title}>Create New Store</Text>
+            <Text style={styles.title}>Add New Product</Text>
             
             <View style={styles.imageUploadContainer}>
                 <ImageUpload onImageSelected={setImageUrl} />
-                <Text style={styles.imageUploadText}>Tap to upload store image</Text>
+                <Text style={styles.imageUploadText}>Tap to upload image</Text>
             </View>
 
             <View style={styles.form}>
                 <TextInput
                     style={styles.input}
-                    placeholder="Store Name"
+                    placeholder="Product Name"
                     value={name}
                     onChangeText={setName}
+                />
+                <TextInput
+                    style={styles.input}
+                    placeholder="Price"
+                    value={price}
+                    onChangeText={setPrice}
+                    keyboardType="numeric"
                 />
                 <TextInput
                     style={[styles.input, styles.descriptionInput]}
@@ -91,11 +94,11 @@ export default function CreateStore() {
 
                 <Pressable
                     style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={handleCreateStore}
+                    onPress={handleAddProduct}
                     disabled={loading}
                 >
                     <Text style={styles.buttonText}>
-                        {loading ? 'Creating...' : 'Create Store'}
+                        {loading ? 'Adding...' : 'Add Product'}
                     </Text>
                 </Pressable>
             </View>
@@ -152,5 +155,4 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-});
-
+}); 

@@ -1,22 +1,6 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { Redirect } from 'expo-router';
 
-export default function HomeTab() {
-  return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Welcome to ShopFlex 🎉</Text>
-      </View>
-  );
+export default function Index() {
+  // Redirect from the root to the tabs
+  return <Redirect href="/(tabs)" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-});

@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../services/firebaseConfig';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../services/firebaseConfig';
 import Toast from 'react-native-toast-message';
 
-export default function SignIn() {
+export default function SignUp() {
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleSignIn = async () => {
-        if (!email || !password) {
+    const handleSignUp = async () => {
+        if (!name || !email || !password) {
             Toast.show({
                 type: 'error',
                 text1: 'Error',
@@ -22,29 +24,56 @@ export default function SignIn() {
 
         setLoading(true);
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            // Create user with email and password
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            // Update profile with display name
+            await updateProfile(user, { displayName: name });
+
+            // Create user document in Firestore
+            await setDoc(doc(db, 'users', user.uid), {
+                uid: user.uid,
+                displayName: name,
+                email: email,
+                createdAt: new Date().toISOString()
+            });
+
+            Toast.show({
+                type: 'success',
+                text1: 'Success',
+                text2: 'Account created successfully'
+            });
+
+            // Navigate to main app
             router.replace('/(tabs)');
         } catch (error) {
-            console.error('Error signing in:', error);
+            console.error('Error signing up:', error);
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: error.message || 'Failed to sign in'
+                text2: error.message || 'Failed to create account'
             });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleGoToSignUp = () => {
-        router.push('/signup');
+    const handleGoToSignIn = () => {
+        router.push('/signin');
     };
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Sign In</Text>
+            <Text style={styles.title}>Create Account</Text>
             
             <View style={styles.form}>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Full Name"
+                    value={name}
+                    onChangeText={setName}
+                />
                 <TextInput
                     style={styles.input}
                     placeholder="Email"
@@ -63,20 +92,20 @@ export default function SignIn() {
 
                 <Pressable
                     style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={handleSignIn}
+                    onPress={handleSignUp}
                     disabled={loading}
                 >
                     <Text style={styles.buttonText}>
-                        {loading ? 'Signing In...' : 'Sign In'}
+                        {loading ? 'Creating Account...' : 'Sign Up'}
                     </Text>
                 </Pressable>
                 
                 <Pressable 
                     style={styles.textButton}
-                    onPress={handleGoToSignUp}
+                    onPress={handleGoToSignIn}
                 >
                     <Text style={styles.textButtonText}>
-                        Don't have an account? <Text style={styles.textButtonHighlight}>Sign Up</Text>
+                        Already have an account? <Text style={styles.textButtonHighlight}>Sign In</Text>
                     </Text>
                 </Pressable>
             </View>
@@ -87,51 +116,54 @@ export default function SignIn() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        justifyContent: 'center',
         padding: 20,
-        backgroundColor: '#fff',
+        backgroundColor: '#fff'
     },
     title: {
-        fontSize: 32,
+        fontSize: 24,
         fontWeight: 'bold',
         marginBottom: 20,
         textAlign: 'center',
+        marginTop: 40
     },
     form: {
-        gap: 16,
+        width: '100%'
     },
     input: {
+        height: 50,
         borderWidth: 1,
         borderColor: '#ddd',
         borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
+        marginBottom: 15,
+        paddingHorizontal: 10,
+        backgroundColor: '#f9f9f9'
     },
     button: {
-        backgroundColor: '#007AFF',
-        padding: 16,
+        backgroundColor: '#4a80f5',
+        height: 50,
         borderRadius: 8,
+        justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 10,
+        marginTop: 10
     },
     buttonDisabled: {
-        opacity: 0.5,
+        opacity: 0.7
     },
     buttonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '600'
     },
     textButton: {
-        padding: 10,
-        alignItems: 'center',
+        marginTop: 20,
+        alignItems: 'center'
     },
     textButtonText: {
-        fontSize: 14,
         color: '#333',
+        fontSize: 14
     },
     textButtonHighlight: {
-        color: '#007AFF',
-        fontWeight: '600',
+        color: '#4a80f5',
+        fontWeight: '600'
     }
-});
+}); 
