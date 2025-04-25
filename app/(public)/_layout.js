@@ -3,15 +3,15 @@ import { View, StyleSheet } from 'react-native';
 
 export default function PublicLayout() {
   return (
-    <Stack>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
       <Stack.Screen
         name="index"
         options={{
-          title: "ShopFlex",
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-          headerTintColor: '#007AFF',
+          headerShown: false,
         }}
       />
       <Stack.Screen
@@ -23,6 +23,7 @@ export default function PublicLayout() {
           },
           headerTintColor: '#007AFF',
           presentation: 'card',
+          headerShown: true,
         }}
       />
       <Stack.Screen

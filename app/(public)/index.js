@@ -4,13 +4,14 @@ import {
   Text, 
   StyleSheet, 
   FlatList, 
-  Pressable, 
   Image, 
   ActivityIndicator, 
   useWindowDimensions,
   SafeAreaView,
   StatusBar,
-  ImageBackground
+  TextInput,
+  TouchableOpacity,
+  ScrollView
 } from 'react-native';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
@@ -31,9 +32,15 @@ const CARD_GRADIENTS = [
   ['#7F7FD5', '#91EAE4'],
 ];
 
-export default function PublicStoresList() {
+// Store categories for filter chips
+const STORE_CATEGORIES = ['All', 'Food', 'Fashion', 'Electronics', 'Home', 'Beauty'];
+
+export default function MarketplaceHome() {
   const [stores, setStores] = useState([]);
+  const [filteredStores, setFilteredStores] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const { width } = useWindowDimensions();
   
   // Determine grid columns based on screen width
@@ -43,6 +50,10 @@ export default function PublicStoresList() {
   useEffect(() => {
     fetchStores();
   }, []);
+
+  useEffect(() => {
+    filterStores();
+  }, [stores, searchQuery, selectedCategory]);
 
   const fetchStores = async () => {
     try {
@@ -57,6 +68,7 @@ export default function PublicStoresList() {
       
       console.log(`Fetched ${storesList.length} stores`);
       setStores(storesList);
+      setFilteredStores(storesList);
     } catch (error) {
       console.error('Error fetching stores:', error);
       Toast.show({
@@ -69,12 +81,40 @@ export default function PublicStoresList() {
     }
   };
 
+  const filterStores = () => {
+    let filtered = [...stores];
+    
+    // Apply search filter
+    if (searchQuery) {
+      filtered = filtered.filter(store => 
+        store.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        store.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    // Apply category filter
+    if (selectedCategory !== 'All') {
+      filtered = filtered.filter(store => 
+        store.category === selectedCategory
+      );
+    }
+    
+    setFilteredStores(filtered);
+  };
+
   const navigateToStore = (storeId) => {
-    router.push(`/(public)/store/${storeId}`);
+    router.replace({
+      pathname: "/(public)/store/[id]",
+      params: { id: storeId }
+    });
   };
 
   const navigateToSellerDashboard = () => {
-    router.push("/(tabs)/");
+    router.replace("/(tabs)");
+  };
+
+  const navigateToCart = () => {
+    router.push("/(public)/cart");
   };
 
   // Assign a consistent gradient to each store based on its index
@@ -82,24 +122,49 @@ export default function PublicStoresList() {
     return CARD_GRADIENTS[index % CARD_GRADIENTS.length];
   };
 
+  const renderCategoryChip = (category) => (
+    <TouchableOpacity 
+      key={category}
+      style={[
+        styles.categoryChip, 
+        selectedCategory === category && styles.selectedCategoryChip
+      ]}
+      onPress={() => setSelectedCategory(category)}
+    >
+      <Text 
+        style={[
+          styles.categoryChipText, 
+          selectedCategory === category && styles.selectedCategoryChipText
+        ]}
+      >
+        {category}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const renderStore = ({ item, index }) => {
     const gradientColors = getGradientColors(index);
     const storeName = item.name || "Unnamed Store";
     
     return (
-      <Pressable 
+      <TouchableOpacity 
         style={[styles.storeCard, { width: cardWidth - 16 }]} 
         onPress={() => navigateToStore(item.id)}
+        activeOpacity={0.8}
       >
         <View style={styles.storeImageContainer}>
           {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={styles.storeImage} />
+            <Image 
+              source={{ uri: item.imageUrl }} 
+              style={styles.storeImage}
+              resizeMode="cover"
+            />
           ) : (
             <LinearGradient
               colors={gradientColors}
               style={styles.gradientBackground}
             >
-              <Ionicons name="storefront" size={48} color="rgba(255,255,255,0.8)" />
+              <Ionicons name="storefront" size={48} color="rgba(255,255,255,0.9)" />
               <Text style={styles.storeInitial}>
                 {storeName.charAt(0).toUpperCase()}
               </Text>
@@ -110,10 +175,21 @@ export default function PublicStoresList() {
           <View style={styles.storeBadge}>
             <Ionicons name="checkmark-circle" size={16} color="#fff" />
           </View>
+          
+          {/* Store logo (circular) */}
+          {item.logoUrl && (
+            <View style={styles.storeLogoWrapper}>
+              <Image 
+                source={{ uri: item.logoUrl }} 
+                style={styles.storeLogo}
+                resizeMode="cover"
+              />
+            </View>
+          )}
         </View>
         
         <View style={styles.storeInfo}>
-          <Text style={styles.storeName}>{storeName}</Text>
+          <Text style={styles.storeName} numberOfLines={1}>{storeName}</Text>
           <Text style={styles.storeDescription} numberOfLines={2}>
             {item.description || 'No description available'}
           </Text>
@@ -121,67 +197,100 @@ export default function PublicStoresList() {
           <View style={styles.storeFooter}>
             <View style={styles.productCount}>
               <Ionicons name="cart-outline" size={14} color="#666" />
-              <Text style={styles.productCountText}>Products</Text>
+              <Text style={styles.productCountText}>View Products</Text>
             </View>
             <Text style={styles.viewStoreText}>View Store →</Text>
           </View>
         </View>
-      </Pressable>
+      </TouchableOpacity>
     );
   };
 
   if (loading) {
     return (
-      <View style={styles.centered}>
+      <View style={styles.centeredContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Discovering stores...</Text>
       </View>
     );
   }
 
+  const renderEmptyState = () => (
+    <View style={styles.emptyStateContainer}>
+      <Ionicons name="storefront-outline" size={80} color="#ccc" />
+      <Text style={styles.emptyStateTitle}>No stores found</Text>
+      {searchQuery || selectedCategory !== 'All' ? (
+        <Text style={styles.emptyStateDescription}>
+          Try a different search or category filter
+        </Text>
+      ) : (
+        <Text style={styles.emptyStateDescription}>
+          Be the first to create a store on ShopFlex!
+        </Text>
+      )}
+      <TouchableOpacity 
+        style={styles.becomeSeller}
+        onPress={navigateToSellerDashboard}
+      >
+        <Text style={styles.becomeSellerText}>Become a Seller</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Header */}
+      {/* App Header */}
       <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View>
-            <Text style={styles.appName}>ShopFlex</Text>
-            <Text style={styles.title}>Discover Amazing Stores</Text>
-          </View>
-          <Pressable 
+        {/* Logo and Actions Row */}
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
             style={styles.sellerButton}
             onPress={navigateToSellerDashboard}
           >
-            <Ionicons name="briefcase-outline" size={16} color="#555" />
-            <Text style={styles.sellerButtonText}>I'm a seller</Text>
-          </Pressable>
+            <Ionicons name="briefcase-outline" size={18} color="white" />
+            <Text style={styles.sellerButtonText}>Seller</Text>
+          </TouchableOpacity>
+          
+          <Text style={styles.brandName}>ShopFlex</Text>
+          
+          <TouchableOpacity style={styles.cartButton} onPress={navigateToCart}>
+            <Ionicons name="cart-outline" size={24} color="#333" />
+          </TouchableOpacity>
         </View>
-      </View>
-      
-      {/* Featured banner */}
-      <View style={styles.banner}>
-        <LinearGradient
-          colors={['#667EEA', '#764BA2']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.bannerGradient}
+        
+        {/* Search Bar */}
+        <View style={styles.searchBarContainer}>
+          <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search stores..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#999"
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        
+        {/* Category Filters */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryFiltersContainer}
         >
-          <View style={styles.bannerContent}>
-            <View>
-              <Text style={styles.bannerTitle}>Find Unique Products</Text>
-              <Text style={styles.bannerSubtitle}>Support local businesses</Text>
-            </View>
-            <Ionicons name="gift-outline" size={36} color="#fff" />
-          </View>
-        </LinearGradient>
+          {STORE_CATEGORIES.map(renderCategoryChip)}
+        </ScrollView>
       </View>
       
-      {/* Stores grid */}
-      {stores.length > 0 ? (
+      {/* Content: Stores or Empty State */}
+      {filteredStores.length > 0 ? (
         <FlatList
-          data={stores}
+          data={filteredStores}
           renderItem={renderStore}
           keyExtractor={(item) => item.id}
           numColumns={numColumns}
@@ -191,17 +300,7 @@ export default function PublicStoresList() {
           columnWrapperStyle={numColumns > 1 ? styles.row : null}
         />
       ) : (
-        <View style={styles.emptyState}>
-          <Ionicons name="storefront" size={70} color="#ccc" />
-          <Text style={styles.emptyText}>No stores found</Text>
-          <Text style={styles.emptySubtext}>Be the first to create a store!</Text>
-          <Pressable 
-            style={styles.createStoreButton}
-            onPress={navigateToSellerDashboard}
-          >
-            <Text style={styles.createStoreButtonText}>Become a Seller</Text>
-          </Pressable>
-        </View>
+        renderEmptyState()
       )}
     </SafeAreaView>
   );
@@ -212,75 +311,93 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
+  centeredContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+  },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 16,
+    paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eaeaea',
   },
-  headerTopRow: {
+  headerContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
-  appName: {
-    fontSize: 16,
-    fontWeight: '600',
+  brandName: {
+    fontSize: 24,
+    fontWeight: '700',
     color: '#007AFF',
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
+    letterSpacing: 0.5,
   },
   sellerButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 8,
+    backgroundColor: '#007bff',
+    paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 16,
+    minHeight: 32,
   },
   sellerButtonText: {
-    color: '#555',
-    fontSize: 14,
+    color: 'white',
+    fontSize: 13,
     fontWeight: '500',
-    marginLeft: 5,
+    marginLeft: 4,
   },
-  banner: {
-    margin: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  cartButton: {
+    padding: 8,
   },
-  bannerGradient: {
-    padding: 20,
-  },
-  bannerContent: {
+  searchBarContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: '#f2f2f2',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
   },
-  bannerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
+  searchIcon: {
+    marginRight: 8,
   },
-  bannerSubtitle: {
+  searchInput: {
+    flex: 1,
+    height: 40,
+    fontSize: 16,
+    color: '#333',
+  },
+  categoryFiltersContainer: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f2f2f2',
+    marginRight: 8,
+  },
+  selectedCategoryChip: {
+    backgroundColor: '#007bff',
+  },
+  categoryChipText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#666',
+  },
+  selectedCategoryChipText: {
+    color: '#fff',
+    fontWeight: '500',
   },
   list: {
     padding: 16,
-    paddingBottom: 20,
+    paddingBottom: 60,
   },
   row: {
     justifyContent: 'space-between',
@@ -289,7 +406,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -297,13 +414,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   storeImageContainer: {
-    height: 140,
+    height: 160,
     position: 'relative',
+    backgroundColor: '#f0f0f0',
   },
   storeImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   gradientBackground: {
     width: '100%',
@@ -313,20 +430,44 @@ const styles = StyleSheet.create({
   },
   storeInitial: {
     position: 'absolute',
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
     color: 'rgba(255,255,255,0.9)',
   },
   storeBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 12,
+    right: 12,
     backgroundColor: '#34C759',
     borderRadius: 12,
     width: 24,
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  storeLogoWrapper: {
+    position: 'absolute',
+    bottom: -20,
+    right: 12,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  storeLogo: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 25,
   },
   storeInfo: {
     padding: 16,
@@ -365,44 +506,43 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: '500',
   },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
   loadingText: {
-    marginTop: 10,
+    marginTop: 16,
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
   },
-  emptyState: {
+  emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: 20,
   },
-  emptyText: {
-    fontSize: 20,
+  emptyStateTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#666',
-    marginTop: 16,
+    color: '#333',
+    marginTop: 20,
   },
-  emptySubtext: {
+  emptyStateDescription: {
     fontSize: 16,
-    color: '#999',
-    marginTop: 8,
+    color: '#666',
     textAlign: 'center',
+    marginTop: 8,
     marginBottom: 24,
+    maxWidth: 280,
   },
-  createStoreButton: {
+  becomeSeller: {
     backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    minHeight: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  createStoreButtonText: {
-    color: '#fff',
+  becomeSellerText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },

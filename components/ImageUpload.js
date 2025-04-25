@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Pressable, StyleSheet, ActivityIndicator, Image, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -7,8 +7,21 @@ import { storage, auth } from '../services/firebaseConfig';
 import Toast from 'react-native-toast-message';
 import * as FileSystem from 'expo-file-system';
 
-export function ImageUpload({ onImageSelected, size = 80 }) {
+export function ImageUpload({ 
+    onImageSelected, 
+    size = 80, 
+    initialImageUrl = null, 
+    shape = "circle", 
+    label = null,
+    uploadType = "product" // New parameter to determine storage path
+}) {
     const [uploading, setUploading] = useState(false);
+    const [imageUrl, setImageUrl] = useState(initialImageUrl);
+    
+    useEffect(() => {
+        // Update image URL if initialImageUrl changes (e.g. when parent component updates)
+        setImageUrl(initialImageUrl);
+    }, [initialImageUrl]);
 
     const pickImage = async () => {
         setUploading(false);
@@ -45,7 +58,8 @@ export function ImageUpload({ onImageSelected, size = 80 }) {
             console.log("📸 Launching image picker");
             const result = await ImagePicker.launchImageLibraryAsync({
                 quality: 0.5,
-                allowsEditing: true
+                allowsEditing: true,
+                mediaTypes: ImagePicker.MediaTypeOptions.Images
             });
             
             console.log("📱 Image picker result:", result.canceled ? "Canceled" : "Image selected");
@@ -109,20 +123,23 @@ export function ImageUpload({ onImageSelected, size = 80 }) {
                 throw new Error("Failed to create blob from image: " + blobError.message);
             }
             
-            // Test if storage is properly configured
-            console.log("🧪 Testing storage configuration:");
-            console.log("🧪 Storage app:", storage.app.name);
-            console.log("🧪 Storage bucket:", storage.app.options.storageBucket);
-            
-            // Use a simpler path with a fixed prefix for testing
+            // Create a simpler storage path based on upload type
             const timestamp = Date.now();
-            const filename = `test-${timestamp}.jpg`;
-            const storagePath = filename;
+            let storagePath;
+            
+            if (uploadType === "storeLogo") {
+                storagePath = `store-logos/${user.uid}/logo-${timestamp}.jpg`;
+            } else if (uploadType === "storeBanner") {
+                storagePath = `store-banners/${user.uid}/banner-${timestamp}.jpg`;
+            } else {
+                storagePath = `products/${user.uid}/product-${timestamp}.jpg`;
+            }
+            
             console.log("📂 Upload path:", storagePath);
             
-            // Create storage reference - use root reference to avoid 404 errors
+            // Create storage reference
             const storageRef = ref(storage, storagePath);
-            console.log("🔗 Storage reference created");
+            console.log("🔗 Storage reference created:", storageRef.fullPath);
             
             Toast.show({
                 type: 'info',
@@ -149,6 +166,10 @@ export function ImageUpload({ onImageSelected, size = 80 }) {
                 const downloadURL = await getDownloadURL(storageRef);
                 console.log("✅ Download URL received:", downloadURL);
                 
+                // Set the local state with the new URL
+                setImageUrl(downloadURL);
+                
+                // Notify the parent component
                 onImageSelected(downloadURL);
                 
                 Toast.show({
@@ -221,28 +242,102 @@ export function ImageUpload({ onImageSelected, size = 80 }) {
         }
     };
 
+    // Determine border radius based on shape
+    const getBorderRadius = () => {
+        if (shape === "circle") {
+            return size / 2;
+        } else if (shape === "rounded") {
+            return 12;
+        }
+        return 0; // square
+    };
+
     return (
-        <Pressable 
-            style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]} 
-            onPress={pickImage}
-            disabled={uploading}
-        >
-            {uploading ? (
-                <ActivityIndicator color="#007AFF" size="large" />
-            ) : (
-                <Ionicons name="camera" size={size * 0.4} color="#007AFF" />
-            )}
-        </Pressable>
+        <View style={styles.wrapper}>
+            {label && <Text style={styles.label}>{label}</Text>}
+            
+            <Pressable 
+                style={[
+                    styles.container, 
+                    { 
+                        width: size, 
+                        height: size, 
+                        borderRadius: getBorderRadius() 
+                    },
+                    imageUrl ? styles.containerWithImage : styles.containerEmpty
+                ]} 
+                onPress={pickImage}
+                disabled={uploading}
+            >
+                {uploading ? (
+                    <ActivityIndicator color="#007AFF" size="large" />
+                ) : imageUrl ? (
+                    <>
+                        <Image 
+                            source={{ uri: imageUrl }} 
+                            style={[
+                                styles.image, 
+                                { borderRadius: getBorderRadius() }
+                            ]} 
+                            resizeMode="cover"
+                        />
+                        <View style={styles.editIconContainer}>
+                            <Ionicons name="create-outline" size={size * 0.25} color="#fff" />
+                        </View>
+                    </>
+                ) : (
+                    <>
+                        <Ionicons name="camera" size={size * 0.4} color="#007AFF" />
+                        <Text style={styles.uploadText}>Upload</Text>
+                    </>
+                )}
+            </Pressable>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
+    wrapper: {
+        alignItems: 'center',
+    },
+    label: {
+        fontSize: 14,
+        color: '#555',
+        marginBottom: 8,
+    },
     container: {
         backgroundColor: '#fff',
         justifyContent: 'center',
         alignItems: 'center',
+        position: 'relative',
+    },
+    containerEmpty: {
         borderWidth: 2,
         borderColor: '#007AFF',
         borderStyle: 'dashed',
+    },
+    containerWithImage: {
+        borderWidth: 0,
+        overflow: 'hidden',
+    },
+    image: {
+        width: '100%',
+        height: '100%',
+    },
+    editIconContainer: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        backgroundColor: 'rgba(0, 122, 255, 0.8)',
+        borderRadius: 12,
+        width: 24,
+        height: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    uploadText: {
+        fontSize: 10,
+        color: '#007AFF',
+        marginTop: 4,
     },
 });

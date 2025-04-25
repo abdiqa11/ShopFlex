@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   SafeAreaView,
+  ScrollView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../../context/CartContext';
@@ -15,10 +17,13 @@ import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../services/firebaseConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function CartScreen() {
-  const { cartItems, removeFromCart, updateQuantity, clearCart, getCartTotal } = useCart();
+  const { cartItems, setCartItems, removeFromCart, updateQuantity, clearCart, getCartTotal } = useCart();
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [totalPrice, setTotalPrice] = useState(0);
 
   // Get cart total
   const cartTotal = getCartTotal();
@@ -39,6 +44,65 @@ export default function CartScreen() {
 
   const storeGroups = Object.values(itemsByStore);
 
+  useEffect(() => {
+    fetchCartItems();
+  }, []);
+
+  const fetchCartItems = async () => {
+    try {
+      setPlacingOrder(true);
+      const storedCart = await AsyncStorage.getItem('cart');
+      if (storedCart) {
+        const parsedCart = JSON.parse(storedCart);
+        // Fetch products details from Firestore for each cart item
+        const cartWithDetails = await Promise.all(
+          parsedCart.map(async (item) => {
+            try {
+              const productDoc = await getDoc(doc(db, 'products', item.productId));
+              if (productDoc.exists()) {
+                const productData = productDoc.data();
+                return {
+                  ...item,
+                  productDetails: {
+                    id: productDoc.id,
+                    ...productData
+                  }
+                };
+              } else {
+                return { ...item, productDetails: { name: 'Product not found', price: 0 } };
+              }
+            } catch (err) {
+              console.error('Error fetching product details:', err);
+              return { ...item, productDetails: { name: 'Error loading product', price: 0 } };
+            }
+          })
+        );
+
+        setCartItems(cartWithDetails);
+        calculateTotal(cartWithDetails);
+      } else {
+        setCartItems([]);
+        setTotalPrice(0);
+      }
+    } catch (error) {
+      console.error('Error fetching cart:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to load cart',
+        text2: 'Please try again later'
+      });
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
+
+  const calculateTotal = (items) => {
+    const total = items.reduce((sum, item) => {
+      return sum + (item.quantity * (item.productDetails?.price || 0));
+    }, 0);
+    setTotalPrice(total);
+  };
+
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) {
       Toast.show({
@@ -56,21 +120,35 @@ export default function CartScreen() {
       const orderPromises = storeGroups.map(async (group) => {
         const { storeId, items } = group;
         
+        // Validate storeId
+        if (!storeId) {
+          console.error('⚠️ Missing storeId for order:', group);
+          Toast.show({
+            type: 'error',
+            text1: 'Order Error',
+            text2: 'Invalid store information'
+          });
+          return null;
+        }
+        
         // Calculate total for this store's items
         const storeTotal = items.reduce((total, item) => {
-          return total + (item.price * item.quantity);
+          return total + ((item.productDetails?.price || 0) * (item.quantity || 1));
         }, 0);
         
-        // Create the order object
+        // Validate items
+        const validItems = items.map(item => ({
+          productId: item.productId || 'unknown',
+          name: item.productDetails?.name || 'Product',
+          price: parseFloat(item.productDetails?.price || 0),
+          quantity: item.quantity || 1,
+          imageUrl: item.productDetails?.imageUrl || null,
+        }));
+        
+        // Create the order object with validated data
         const order = {
           storeId,
-          items: items.map(item => ({
-            productId: item.productId,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            imageUrl: item.imageUrl,
-          })),
+          items: validItems,
           total: storeTotal,
           userId: auth.currentUser?.uid || null,
           userEmail: auth.currentUser?.email || 'anonymous',
@@ -78,26 +156,45 @@ export default function CartScreen() {
           status: 'placed'
         };
         
+        // Log order data before submission
+        console.log('Creating order with:', {
+          storeId,
+          itemsCount: validItems.length,
+          total: storeTotal,
+          userId: auth.currentUser?.uid || null
+        });
+        
+        // Final validation check
+        if (!storeId || !Array.isArray(validItems) || storeTotal === undefined) {
+          console.error('🔥 Invalid order data, aborting save');
+          return null;
+        }
+        
         // Save to Firestore
         const orderRef = await addDoc(collection(db, 'orders'), order);
         return orderRef.id;
       });
       
-      // Wait for all orders to be created
-      await Promise.all(orderPromises);
+      // Wait for all orders to be created, filtering out any null results
+      const orderResults = await Promise.all(orderPromises);
+      const validOrders = orderResults.filter(id => id !== null);
       
-      // Clear the cart
-      clearCart();
-      
-      // Show success message
-      Toast.show({
-        type: 'success',
-        text1: 'Order Placed Successfully',
-        text2: 'Thank you for your order!'
-      });
-      
-      // Navigate back to the main page
-      router.push('/(public)/');
+      if (validOrders.length > 0) {
+        // Clear the cart
+        clearCart();
+        
+        // Show success message
+        Toast.show({
+          type: 'success',
+          text1: 'Order Placed Successfully',
+          text2: 'Thank you for your order!'
+        });
+        
+        // Navigate back to the main page using our reliable function
+        goToMainPage();
+      } else {
+        throw new Error('No valid orders were created');
+      }
       
     } catch (error) {
       console.error('Error placing order:', error);
@@ -123,28 +220,41 @@ export default function CartScreen() {
     }
   };
 
+  // Handle navigation back to main page
+  const goToMainPage = () => {
+    // Use push instead of navigate for better compatibility
+    router.push("/(public)/");
+  };
+
   const renderCartItem = ({ item }) => (
     <View style={styles.cartItem}>
       <View style={styles.productImageContainer}>
-        {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.productImage} />
+        {item.productDetails?.imageUrl ? (
+          <Image source={{ uri: item.productDetails.imageUrl }} style={styles.productImage} />
         ) : (
           <View style={styles.placeholderImage}>
-            <Ionicons name="image-outline" size={30} color="#999" />
+            <Ionicons name="image-outline" size={30} color="#ccc" />
           </View>
         )}
       </View>
       
       <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.name}</Text>
-        <Text style={styles.productPrice}>${parseFloat(item.price).toFixed(2)}</Text>
+        <View>
+          <Text style={styles.productName}>{item.productDetails?.name || 'Product'}</Text>
+          <Text style={styles.storeIndicator}>
+            <Ionicons name="storefront-outline" size={12} color="#666" style={styles.storeIcon} />
+            {item.storeName || 'Unknown Store'}
+          </Text>
+          <Text style={styles.productPrice}>${parseFloat(item.productDetails?.price || 0).toFixed(2)}</Text>
+        </View>
         
         <View style={styles.quantityContainer}>
           <TouchableOpacity
             style={styles.quantityButton}
             onPress={() => decreaseQuantity(item.productId, item.quantity)}
+            disabled={item.quantity <= 1}
           >
-            <Ionicons name="remove" size={18} color="#666" />
+            <Ionicons name="remove" size={18} color={item.quantity <= 1 ? "#ccc" : "#007AFF"} />
           </TouchableOpacity>
           
           <Text style={styles.quantityText}>{item.quantity}</Text>
@@ -153,60 +263,62 @@ export default function CartScreen() {
             style={styles.quantityButton}
             onPress={() => increaseQuantity(item.productId, item.quantity)}
           >
-            <Ionicons name="add" size={18} color="#666" />
+            <Ionicons name="add" size={18} color="#007AFF" />
           </TouchableOpacity>
         </View>
       </View>
       
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={() => removeFromCart(item.productId)}
-      >
-        <Ionicons name="trash-outline" size={22} color="#FF3B30" />
-      </TouchableOpacity>
+      <View style={styles.itemTotalContainer}>
+        <Text style={styles.itemTotalLabel}>Total</Text>
+        <Text style={styles.itemTotalPrice}>
+          ${parseFloat((item.productDetails?.price || 0) * item.quantity).toFixed(2)}
+        </Text>
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => removeFromCart(item.productId)}
+        >
+          <Ionicons name="trash-outline" size={22} color="#FF3B30" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
   const renderStoreGroup = ({ item }) => (
     <View style={styles.storeGroup}>
-      <Text style={styles.storeName}>{item.storeName}</Text>
+      <View style={styles.storeHeader}>
+        <Ionicons name="storefront" size={20} color="#555" />
+        <Text style={styles.storeName}>{item.storeName}</Text>
+      </View>
       <FlatList
         data={item.items}
         renderItem={renderCartItem}
         keyExtractor={(item) => item.productId}
         scrollEnabled={false}
+        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
       />
     </View>
   );
 
-  if (cartItems.length === 0) {
+  const EmptyCart = () => (
+    <View style={styles.emptyCart}>
+      <Ionicons name="cart-outline" size={80} color="#ccc" />
+      <Text style={styles.emptyCartTitle}>Your cart is empty</Text>
+      <Text style={styles.emptyCartText}>Add items to your cart to see them here</Text>
+      <TouchableOpacity
+        style={styles.browseButton}
+        onPress={goToMainPage}
+      >
+        <Text style={styles.browseButtonText}>Browse Stores</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (placingOrder) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Cart</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        
-        <View style={styles.emptyCart}>
-          <Ionicons name="cart-outline" size={80} color="#ccc" />
-          <Text style={styles.emptyCartText}>Your cart is empty</Text>
-          <Text style={styles.emptyCartSubtext}>
-            Browse stores and add products to your cart
-          </Text>
-          <TouchableOpacity
-            style={styles.browseButton}
-            onPress={() => router.push('/(public)/')}
-          >
-            <Text style={styles.browseButtonText}>Browse Stores</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Placing order...</Text>
+      </View>
     );
   }
 
@@ -215,7 +327,7 @@ export default function CartScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={goToMainPage}
         >
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
@@ -239,7 +351,7 @@ export default function CartScreen() {
             
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>${cartTotal.toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>${totalPrice.toFixed(2)}</Text>
             </View>
             
             <View style={styles.summaryItem}>
@@ -251,7 +363,7 @@ export default function CartScreen() {
             
             <View style={styles.summaryItem}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${cartTotal.toFixed(2)}</Text>
+              <Text style={styles.totalValue}>${totalPrice.toFixed(2)}</Text>
             </View>
             
             <TouchableOpacity
@@ -324,26 +436,41 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  storeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
   storeName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    marginLeft: 8,
+  },
+  itemSeparator: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 16,
   },
   cartItem: {
     flexDirection: 'row',
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    backgroundColor: '#fff',
   },
   productImageContainer: {
     width: 80,
     height: 80,
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   productImage: {
     width: '100%',
@@ -367,6 +494,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 4,
+  },
+  storeIndicator: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  storeIcon: {
+    marginRight: 4,
   },
   productPrice: {
     fontSize: 16,
@@ -392,6 +529,24 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     minWidth: 25,
     textAlign: 'center',
+  },
+  itemTotalContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingLeft: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: '#f0f0f0',
+  },
+  itemTotalLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  itemTotalPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
   },
   removeButton: {
     width: 40,
@@ -466,17 +621,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
   },
-  emptyCartText: {
+  emptyCartTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
-    marginTop: 16,
+    marginTop: 20,
+    marginBottom: 8,
   },
-  emptyCartSubtext: {
+  emptyCartText: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    marginTop: 8,
     marginBottom: 24,
   },
   browseButton: {
@@ -489,5 +644,16 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
   },
 }); 

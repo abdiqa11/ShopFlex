@@ -18,10 +18,10 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Use the gs:// URL format for the storage bucket
-const storage = getStorage(app, "gs://shopflex-5e1e2.appspot.com");
+// Using the correct storage bucket explicitly 
+const storage = getStorage(app, "gs://shopflex-5e1e2.firebasestorage.app");
 
 // Log for debugging purposes
-console.log("Firebase Storage bucket configured:", storage.app.options.storageBucket);
+console.log("Firebase Storage bucket configured:", storage.bucket);
 
 export { auth, db, storage };

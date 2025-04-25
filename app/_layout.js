@@ -2,16 +2,36 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import Toast from 'react-native-toast-message';
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Redirect } from 'expo-router';
 import { CartProvider } from '../context/CartContext';
 
 export default function RootLayout() {
   return (
     <CartProvider>
       <>
-        <Stack />
+        <Stack 
+          screenOptions={{
+            headerShown: false,
+          }}
+          // This hides folder names from URLs
+          initialRouteName="index"
+        >
+          <Stack.Screen 
+            name="(public)" 
+            options={{ 
+              headerShown: false,
+              // This prevents the segment name from appearing in the URL
+              href: null
+            }} 
+          />
+          <Stack.Screen 
+            name="(tabs)" 
+            options={{ 
+              headerShown: false,
+              // This prevents the segment name from appearing in the URL
+              href: null
+            }} 
+          />
+        </Stack>
         <Toast />
       </>
     </CartProvider>

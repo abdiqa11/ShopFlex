@@ -71,7 +71,8 @@ export default function StoreDetail() {
                 id: store.id,
                 name: store.name, 
                 description: store.description,
-                imageUrl: store.imageUrl 
+                imageUrl: store.imageUrl,
+                logoUrl: store.logoUrl || ''
             }
         });
     };

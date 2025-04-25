@@ -1,24 +1,99 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
-import { collection, addDoc } from 'firebase/firestore';
+import { router, useLocalSearchParams } from 'expo-router';
+import { doc, updateDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../services/firebaseConfig';
 import { ImageUpload } from '../components/ImageUpload';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function CreateStore() {
-    const [name, setName] = useState('');
-    const [description, setDescription] = useState('');
-    const [logoUrl, setLogoUrl] = useState('');
+export default function UpdateStore() {
+    const params = useLocalSearchParams();
+    const { id } = params;
+    
+    const [name, setName] = useState(params.name || '');
+    const [description, setDescription] = useState(params.description || '');
+    const [logoUrl, setLogoUrl] = useState(params.logoUrl || '');
     const [loading, setLoading] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [storeData, setStoreData] = useState(null);
 
-    const handleCreateStore = async () => {
+    useEffect(() => {
+        const fetchStore = async () => {
+            try {
+                if (!id) {
+                    Toast.show({
+                        type: 'error',
+                        text1: 'Error',
+                        text2: 'Store ID is missing'
+                    });
+                    router.back();
+                    return;
+                }
+
+                // Verify user is logged in
+                const user = auth.currentUser;
+                if (!user) {
+                    Toast.show({
+                        type: 'error',
+                        text1: 'Authentication Required',
+                        text2: 'Please sign in to update store details'
+                    });
+                    router.push('/signin');
+                    return;
+                }
+                
+                // Get the store document
+                const storeDoc = doc(db, 'stores', id);
+                const storeSnap = await getDoc(storeDoc);
+                
+                if (storeSnap.exists()) {
+                    const data = storeSnap.data();
+                    
+                    // Verify ownership
+                    if (data.userId !== user.uid && data.ownerId !== user.uid) {
+                        Toast.show({
+                            type: 'error',
+                            text1: 'Access Denied',
+                            text2: 'You do not own this store'
+                        });
+                        router.back();
+                        return;
+                    }
+                    
+                    setStoreData(data);
+                    setName(data.name || '');
+                    setDescription(data.description || '');
+                    setLogoUrl(data.logoUrl || '');
+                } else {
+                    Toast.show({
+                        type: 'error',
+                        text1: 'Error',
+                        text2: 'Store not found'
+                    });
+                    router.back();
+                }
+            } catch (error) {
+                console.error('Error fetching store:', error);
+                Toast.show({
+                    type: 'error',
+                    text1: 'Error',
+                    text2: 'Failed to load store details'
+                });
+            } finally {
+                setInitialLoading(false);
+            }
+        };
+
+        fetchStore();
+    }, [id]);
+
+    const handleUpdateStore = async () => {
         if (!name || !description) {
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: 'Please fill in all fields'
+                text2: 'Please fill in all required fields'
             });
             return;
         }
@@ -30,7 +105,7 @@ export default function CreateStore() {
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: 'You must be logged in to create a store'
+                text2: 'You must be logged in to update a store'
             });
             router.push('/signin');
             return;
@@ -38,39 +113,58 @@ export default function CreateStore() {
         
         setLoading(true);
         try {
-            await addDoc(collection(db, 'stores'), {
+            // Verify ownership again
+            if (storeData && storeData.userId !== user.uid && storeData.ownerId !== user.uid) {
+                Toast.show({
+                    type: 'error',
+                    text1: 'Error',
+                    text2: 'You do not have permission to edit this store'
+                });
+                setLoading(false);
+                return;
+            }
+
+            const storeRef = doc(db, 'stores', id);
+            await updateDoc(storeRef, {
                 name,
                 description,
                 logoUrl,
-                createdAt: new Date(),
-                ownerId: user.uid,
-                userId: user.uid
+                updatedAt: new Date()
             });
             
             Toast.show({
                 type: 'success',
                 text1: 'Success',
-                text2: 'Store created successfully'
+                text2: 'Store updated successfully'
             });
             
             router.back();
         } catch (error) {
-            console.error('Error creating store:', error);
+            console.error('Error updating store:', error);
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: 'Failed to create store'
+                text2: 'Failed to update store'
             });
         } finally {
             setLoading(false);
         }
     };
 
+    if (initialLoading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Loading store details...</Text>
+            </View>
+        );
+    }
+
     return (
         <ScrollView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>Create New Store</Text>
-                <Text style={styles.subtitle}>Set up your store presence with a logo and details</Text>
+                <Text style={styles.title}>Update Store</Text>
+                <Text style={styles.subtitle}>Edit your store details and logo</Text>
             </View>
             
             <View style={styles.imageSection}>
@@ -83,7 +177,7 @@ export default function CreateStore() {
                         initialImageUrl={logoUrl}
                         uploadType="storeLogo"
                     />
-                    <Text style={styles.helperText}>Your logo will appear in store listings</Text>
+                    <Text style={styles.helperText}>Your logo appears in store listings</Text>
                 </View>
             </View>
 
@@ -117,15 +211,15 @@ export default function CreateStore() {
 
                 <Pressable
                     style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={handleCreateStore}
+                    onPress={handleUpdateStore}
                     disabled={loading}
                 >
                     {loading ? (
                         <ActivityIndicator color="#fff" size="small" />
                     ) : (
                         <>
-                            <Ionicons name="add-circle-outline" size={18} color="#fff" style={styles.buttonIcon} />
-                            <Text style={styles.buttonText}>Create Store</Text>
+                            <Ionicons name="save-outline" size={18} color="#fff" style={styles.buttonIcon} />
+                            <Text style={styles.buttonText}>Save Changes</Text>
                         </>
                     )}
                 </Pressable>
@@ -138,6 +232,18 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#fff',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#fff',
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
     },
     header: {
         padding: 20,
@@ -229,5 +335,4 @@ const styles = StyleSheet.create({
     buttonIcon: {
         marginRight: 8,
     },
-});
-
+}); 

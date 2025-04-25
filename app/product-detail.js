@@ -1,16 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
+import { doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../services/firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 
 export default function ProductDetail() {
-    const { id, name, price, description, imageUrl } = useLocalSearchParams();
+    const { id, name: initialName, price: initialPrice, description: initialDescription, imageUrl: initialImageUrl } = useLocalSearchParams();
     const [loading, setLoading] = useState(false);
+    const [isOwner, setIsOwner] = useState(false);
+    const [name, setName] = useState(initialName);
+    const [price, setPrice] = useState(initialPrice);
+    const [description, setDescription] = useState(initialDescription);
+    const [imageUrl, setImageUrl] = useState(initialImageUrl);
+    const [productData, setProductData] = useState(null);
+
+    useEffect(() => {
+        // Fetch the full product data to verify ownership
+        const fetchProduct = async () => {
+            try {
+                // Verify user is logged in
+                const currentUser = auth.currentUser;
+                if (!currentUser) {
+                    console.log('User not authenticated');
+                    return;
+                }
+
+                const productDoc = await getDoc(doc(db, 'products', id));
+                if (productDoc.exists()) {
+                    const data = productDoc.data();
+                    setProductData(data);
+                    
+                    // Update product details with the latest from the database
+                    setName(data.name || initialName);
+                    setPrice(data.price?.toString() || initialPrice);
+                    setDescription(data.description || initialDescription);
+                    setImageUrl(data.imageUrl || initialImageUrl);
+                    
+                    // Check if current user is the product owner
+                    if (data.userId === currentUser.uid) {
+                        setIsOwner(true);
+                    } else {
+                        console.log('User does not own this product');
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching product:', error);
+                Toast.show({
+                    type: 'error',
+                    text1: 'Error',
+                    text2: 'Failed to load product details'
+                });
+            }
+        };
+
+        fetchProduct();
+    }, [id]);
 
     const handleDelete = async () => {
+        // Verify user is logged in
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            Toast.show({
+                type: 'error',
+                text1: 'Authentication Required',
+                text2: 'You must be logged in to delete products'
+            });
+            router.push('/signin');
+            return;
+        }
+
+        // Verify product ownership
+        if (!isOwner) {
+            Toast.show({
+                type: 'error',
+                text1: 'Permission Denied',
+                text2: 'You can only delete your own products'
+            });
+            return;
+        }
+
         setLoading(true);
         try {
             await deleteDoc(doc(db, 'products', id));
@@ -25,7 +95,7 @@ export default function ProductDetail() {
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: 'Failed to delete product'
+                text2: 'Failed to delete product: ' + error.message
             });
         } finally {
             setLoading(false);
@@ -33,6 +103,15 @@ export default function ProductDetail() {
     };
 
     const handleUpdate = () => {
+        if (!isOwner) {
+            Toast.show({
+                type: 'error',
+                text1: 'Permission Denied',
+                text2: 'You can only update your own products'
+            });
+            return;
+        }
+
         router.push({
             pathname: '/update-product',
             params: { id, name, price, description, imageUrl }
@@ -57,23 +136,31 @@ export default function ProductDetail() {
                 <Text style={styles.description}>{description}</Text>
             </View>
 
-            <View style={styles.actions}>
-                <Pressable
-                    style={[styles.button, styles.updateButton]}
-                    onPress={handleUpdate}
-                    disabled={loading}
-                >
-                    <Text style={styles.buttonText}>Update Product</Text>
-                </Pressable>
+            {isOwner ? (
+                <View style={styles.actions}>
+                    <Pressable
+                        style={[styles.button, styles.updateButton]}
+                        onPress={handleUpdate}
+                        disabled={loading}
+                    >
+                        <Text style={styles.buttonText}>Update Product</Text>
+                    </Pressable>
 
-                <Pressable
-                    style={[styles.button, styles.deleteButton]}
-                    onPress={handleDelete}
-                    disabled={loading}
-                >
-                    <Text style={styles.buttonText}>Delete Product</Text>
-                </Pressable>
-            </View>
+                    <Pressable
+                        style={[styles.button, styles.deleteButton]}
+                        onPress={handleDelete}
+                        disabled={loading}
+                    >
+                        <Text style={styles.buttonText}>Delete Product</Text>
+                    </Pressable>
+                </View>
+            ) : (
+                <View style={styles.notOwnerMessage}>
+                    <Text style={styles.infoText}>
+                        You are viewing this product as a customer.
+                    </Text>
+                </View>
+            )}
         </ScrollView>
     );
 }
@@ -136,5 +223,14 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
+    },
+    notOwnerMessage: {
+        padding: 20,
+        alignItems: 'center',
+    },
+    infoText: {
+        color: '#666',
+        fontSize: 16,
+        textAlign: 'center',
     },
 }); 
