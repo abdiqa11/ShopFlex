@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -13,15 +14,20 @@ const firebaseConfig = {
   appId: "1:681925401865:web:2631c145079fc3d27087d8"
 };
 
+// Initialize Firebase app
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase services
-const auth = getAuth(app);
+// Initialize Firebase services with AsyncStorage persistence
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
+
+// Initialize Firestore and Storage
 const db = getFirestore(app);
-// Using the correct storage bucket explicitly 
-const storage = getStorage(app, "gs://shopflex-5e1e2.firebasestorage.app");
+const storage = getStorage(app);
 
-// Log for debugging purposes
-console.log("Firebase Storage bucket configured:", storage.bucket);
+// Log initialization for debugging
+console.log("Firebase initialized in firebaseConfig.js");
 
+// Export Firebase services
 export { auth, db, storage };

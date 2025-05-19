@@ -4,8 +4,14 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Redirect } from 'expo-router';
 
-export default function ProductList() {
+export default function ProductsRedirect() {
+    // Redirect to the proper location in the tabs structure
+    return <Redirect href="/(tabs)/products" />;
+}
+
+export function ProductList() {
     const [products, setProducts] = useState([]);
     const router = useRouter();
 

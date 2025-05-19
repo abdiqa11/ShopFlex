@@ -35,7 +35,7 @@ const CARD_GRADIENTS = [
 // Store categories for filter chips
 const STORE_CATEGORIES = ['All', 'Food', 'Fashion', 'Electronics', 'Home', 'Beauty'];
 
-export default function MarketplaceHome() {
+const MarketplaceHome = () => {
   const [stores, setStores] = useState([]);
   const [filteredStores, setFilteredStores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -249,13 +249,17 @@ export default function MarketplaceHome() {
             style={styles.sellerButton}
             onPress={navigateToSellerDashboard}
           >
-            <Ionicons name="briefcase-outline" size={18} color="white" />
-            <Text style={styles.sellerButtonText}>Seller</Text>
+            <Text style={styles.sellerButtonText}>I'm a Seller</Text>
           </TouchableOpacity>
           
-          <Text style={styles.brandName}>ShopFlex</Text>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoText}>ShopFlex</Text>
+          </View>
           
-          <TouchableOpacity style={styles.cartButton} onPress={navigateToCart}>
+          <TouchableOpacity 
+            style={styles.cartButton}
+            onPress={navigateToCart}
+          >
             <Ionicons name="cart-outline" size={24} color="#333" />
           </TouchableOpacity>
         </View>
@@ -304,7 +308,7 @@ export default function MarketplaceHome() {
       )}
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -332,7 +336,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  brandName: {
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoText: {
     fontSize: 24,
     fontWeight: '700',
     color: '#007AFF',
@@ -546,4 +554,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-}); 
+});
+
+export default MarketplaceHome; 

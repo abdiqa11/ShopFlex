@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
 import { db, auth } from '../services/firebaseConfig';
 import { ImageUpload } from '../components/ImageUpload';
@@ -444,4 +444,9 @@ export default function AddProduct() {
             </View>
         </ScrollView>
     );
+}
+
+export function AddProductRedirect() {
+    // Redirect to the proper location in the tabs structure
+    return <Redirect href="/(tabs)/add-product" />;
 } 

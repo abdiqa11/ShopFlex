@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, FlatList, Pressable, ScrollView } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Redirect } from 'expo-router';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../services/firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 
-export default function StoreDetail() {
+export default function StoreDetailRedirect() {
+    const { id } = useLocalSearchParams();
+    return <Redirect href={`/(public)/store/${id}`} />;
+}
+
+export function StoreDetail() {
     const { id } = useLocalSearchParams();
     const [store, setStore] = useState(null);
     const [products, setProducts] = useState([]);

@@ -1,7 +1,10 @@
 import { Redirect } from 'expo-router';
+import { auth } from '../services/firebaseConfig';
 
 export default function IndexRedirect() {
-  // Use the Redirect component which is designed for initial routing
-  // This won't cause "navigate before mounting" errors
-  return <Redirect href="/(public)" />;
+  // Check if user is authenticated
+  const isAuthenticated = auth.currentUser !== null;
+  
+  // Redirect based on auth state
+  return <Redirect href={isAuthenticated ? "/(tabs)" : "/(public)"} />;
 }

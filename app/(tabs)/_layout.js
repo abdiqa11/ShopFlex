@@ -1,59 +1,46 @@
+import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
 
-export default function TabLayout() {
+export default function TabsLayout() {
     return (
-        <Tabs 
-            screenOptions={{ 
+        <Tabs
+            screenOptions={{
+                headerShown: false,
                 tabBarActiveTintColor: '#007AFF',
-                headerRight: () => (
-                    <TouchableOpacity
-                        onPress={() => router.push('/profile')}
-                        style={{ marginRight: 15 }}
-                    >
-                        <Ionicons name="person-circle" size={28} color="#007AFF" />
-                    </TouchableOpacity>
-                ),
+                tabBarInactiveTintColor: '#999',
+                tabBarStyle: {
+                    borderTopWidth: 1,
+                    borderTopColor: '#eaeaea',
+                    backgroundColor: '#fff',
+                },
             }}
         >
-            <Tabs.Screen 
-                name="index" 
-                options={{ 
-                    title: 'Marketplace',
+            <Tabs.Screen
+                name="index"
+                options={{
+                    title: 'Dashboard',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="storefront" size={size} color={color} />
+                        <Ionicons name="home-outline" size={size} color={color} />
                     ),
-                }} 
+                }}
             />
-            <Tabs.Screen 
-                name="products/index" 
-                options={{ 
-                    title: 'My Products',
-                    headerShown: true,
-                    headerTitle: "My Products",
+            <Tabs.Screen
+                name="products"
+                options={{
+                    title: 'Products',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="grid" size={size} color={color} />
+                        <Ionicons name="cube-outline" size={size} color={color} />
                     ),
-                }} 
+                }}
             />
-            <Tabs.Screen 
-                name="add-product/index" 
-                options={{ 
-                    title: 'Add Product',
-                    headerShown: true,
+            <Tabs.Screen
+                name="profile"
+                options={{
+                    title: 'Profile',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="add-circle" size={size} color={color} />
+                        <Ionicons name="person-outline" size={size} color={color} />
                     ),
-                }} 
-            />
-            
-            {/* Remove the profile tab since we're moving it to the header */}
-            <Tabs.Screen 
-                name="profile/index" 
-                options={{ 
-                    href: null, // This hides the tab
                 }}
             />
         </Tabs>
