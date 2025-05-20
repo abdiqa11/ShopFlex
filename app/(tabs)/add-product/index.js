@@ -60,7 +60,7 @@ export default function AddProduct() {
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {
-        console.log('User not authenticated');
+        console.log('❌ User not authenticated');
         Toast.show({
           type: 'error',
           text1: 'Authentication Required',
@@ -70,6 +70,7 @@ export default function AddProduct() {
         return;
       }
 
+      console.log('🔍 Fetching stores for user:', currentUser.uid);
       const storesQuery = query(
         collection(db, 'stores'),
         where('userId', '==', currentUser.uid)
@@ -81,17 +82,21 @@ export default function AddProduct() {
         ...doc.data()
       }));
       
+      console.log('📦 Fetched stores:', storeList);
       setStores(storeList);
       
       // Set the first store as default if any exists
       if (storeList.length > 0) {
-        setSelectedStoreId(storeList[0].id);
-        setSelectedStoreName(storeList[0].name);
+        const firstStore = storeList[0];
+        setSelectedStoreId(firstStore.id);
+        setSelectedStoreName(firstStore.name || firstStore.storeName || 'Unnamed Store');
+        console.log('✅ Set default store:', {
+          id: firstStore.id,
+          name: firstStore.name || firstStore.storeName
+        });
       }
-      
-      console.log(`Fetched ${storeList.length} stores owned by user`);
     } catch (error) {
-      console.error('Error fetching stores:', error);
+      console.error('❌ Error fetching stores:', error);
       Toast.show({
         type: 'error',
         text1: 'Error loading stores',
@@ -101,45 +106,54 @@ export default function AddProduct() {
   };
 
   const handleAddProduct = async () => {
-    if (!name || !price || !description || !selectedStoreId || !category) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Please fill all required fields and select a store and category'
-      });
-      return;
-    }
-
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      Toast.show({
-        type: 'error',
-        text1: 'Authentication Required',
-        text2: 'Please sign in to add products'
-      });
-      return;
-    }
-
-    setLoading(true);
     try {
-      const productData = {
-        name,
-        price: parseFloat(price),
-        description,
-        imageUrl,
-        category, // This is now guaranteed to be one of our standard lowercase values
-        storeId: selectedStoreId,
-        storeName: selectedStoreName,
-        createdAt: new Date(),
-        userId: currentUser.uid
-      };
-      
-      // Add stock if provided
-      if (stock) {
-        productData.stock = parseInt(stock, 10);
+      console.log('🧪 Selected Store ID:', selectedStoreId);
+      console.log('📦 Stores array:', stores);
+
+      const selectedStore = stores?.find((store) => store.id === selectedStoreId);
+      console.log('🏪 Selected Store Object:', selectedStore);
+
+      const storeName = selectedStore?.name ?? selectedStore?.storeName ?? 'Unnamed Store';
+      console.log('🔍 Final Store Name:', storeName, '| Type:', typeof storeName);
+
+      // Validate all required fields
+      if (!name || !price || !description || !selectedStoreId || !category) {
+        console.log('❌ Missing fields', {
+          name,
+          price,
+          description,
+          selectedStoreId,
+          category
+        });
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please fill in all product details'
+        });
+        return;
       }
-      
-      await addDoc(collection(db, 'products'), productData);
+
+      setLoading(true);
+
+      const productData = {
+        name: name.trim(),
+        price: parseFloat(price) || 0,
+        description: description.trim(),
+        category: category.toLowerCase(),
+        storeId: selectedStoreId,
+        storeName, // ✅ Always defined string
+        createdAt: new Date(),
+        userId: auth.currentUser.uid,
+        imageUrl: imageUrl || null,
+        stock: stock ? parseInt(stock, 10) : 0,
+        status: 'active',
+        updatedAt: new Date()
+      };
+
+      console.log('📤 Final productData:', productData);
+
+      const docRef = await addDoc(collection(db, 'products'), productData);
+      console.log('✅ Product saved to Firestore!');
       
       Toast.show({
         type: 'success',
@@ -158,11 +172,11 @@ export default function AddProduct() {
       // Navigate to products list
       router.push('/(tabs)/products');
     } catch (error) {
-      console.error('Error adding product:', error);
+      console.error('❌ Firestore Save Error:', error);
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to add product'
+        text2: 'Failed to add product: ' + error.message
       });
     } finally {
       setLoading(false);
@@ -223,7 +237,7 @@ export default function AddProduct() {
                   style={styles.storeOption}
                   onPress={() => {
                     setSelectedStoreId(store.id);
-                    setSelectedStoreName(store.name);
+                    setSelectedStoreName(store.name || store.storeName || 'Unnamed Store');
                     setShowStoreSelector(false);
                   }}
                 >
@@ -231,7 +245,7 @@ export default function AddProduct() {
                     styles.storeOptionText,
                     selectedStoreId === store.id && styles.selectedStoreOptionText
                   ]}>
-                    {store.name}
+                    {store.name || store.storeName || 'Unnamed Store'}
                   </Text>
                   {selectedStoreId === store.id && (
                     <Ionicons name="checkmark" size={20} color="#007AFF" />

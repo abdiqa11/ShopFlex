@@ -107,17 +107,29 @@ export function ImageUpload({
                 console.log("📁 File size:", (fileInfo.size / 1024 / 1024).toFixed(2) + "MB");
                 console.log("📁 File exists:", fileInfo.exists);
                 console.log("📁 File URI:", fileInfo.uri);
+                
+                if (!fileInfo.exists) {
+                    throw new Error("Selected file does not exist");
+                }
             } catch (error) {
-                console.log("⚠️ Could not get file info:", error);
+                console.error("❌ Error getting file info:", error);
+                throw new Error("Failed to access image file: " + error.message);
             }
             
             console.log("🔄 Fetching image as blob");
             let blob;
             try {
                 const response = await fetch(imageUri);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 blob = await response.blob();
                 console.log("✅ Blob created successfully, size:", blob.size);
                 console.log("✅ Blob type:", blob.type);
+                
+                if (blob.size === 0) {
+                    throw new Error("Blob is empty");
+                }
             } catch (blobError) {
                 console.error("❌ Error creating blob:", blobError);
                 throw new Error("Failed to create blob from image: " + blobError.message);
@@ -182,6 +194,8 @@ export function ImageUpload({
                 console.error("❌ Storage error status:", uploadError.status_ || "No status");
                 console.error("❌ Storage error name:", uploadError.name);
                 console.error("❌ Storage error code:", uploadError.code);
+                console.error("❌ Storage error message:", uploadError.message);
+                console.error("❌ Storage error stack:", uploadError.stack);
                 
                 // Show a more helpful error message based on the failure
                 let errorMessage = "Upload failed";
@@ -189,6 +203,12 @@ export function ImageUpload({
                     errorMessage = "Storage bucket not found. Check Firebase configuration.";
                 } else if (uploadError.code === "storage/unauthorized") {
                     errorMessage = "Not authorized to upload. Check Firebase rules.";
+                } else if (uploadError.code === "storage/canceled") {
+                    errorMessage = "Upload was canceled.";
+                } else if (uploadError.code === "storage/retry-limit-exceeded") {
+                    errorMessage = "Upload failed due to network issues. Please try again.";
+                } else if (uploadError.code === "storage/invalid-argument") {
+                    errorMessage = "Invalid image file.";
                 } else {
                     errorMessage = `${uploadError.message || "Unknown error"}`;
                 }

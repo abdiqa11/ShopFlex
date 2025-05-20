@@ -1,126 +1,117 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Create the Cart Context
-export const CartContext = createContext();
+const CartContext = createContext();
 
-// Create a custom hook to use the cart context
-export const useCart = () => useContext(CartContext);
-
-export const CartProvider = ({ children }) => {
-  const [cartItems, setCartItems] = useState([]);
+export function CartProvider({ children }) {
+  const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load cart from AsyncStorage on initial load
   useEffect(() => {
-    const loadCart = async () => {
-      try {
-        const savedCart = await AsyncStorage.getItem('cart');
-        if (savedCart) {
-          setCartItems(JSON.parse(savedCart));
-        }
-      } catch (error) {
-        console.error('Failed to load cart from storage', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadCart();
   }, []);
 
-  // Save cart to AsyncStorage whenever it changes
-  useEffect(() => {
-    const saveCart = async () => {
-      try {
-        await AsyncStorage.setItem('cart', JSON.stringify(cartItems));
-      } catch (error) {
-        console.error('Failed to save cart to storage', error);
+  const loadCart = async () => {
+    try {
+      const savedCart = await AsyncStorage.getItem('cart');
+      if (savedCart) {
+        setCart(JSON.parse(savedCart));
       }
-    };
-
-    if (!loading) {
-      saveCart();
+    } catch (error) {
+      console.error('Error loading cart:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [cartItems, loading]);
+  };
 
-  // Add item to cart
+  const saveCart = async (newCart) => {
+    try {
+      await AsyncStorage.setItem('cart', JSON.stringify(newCart));
+    } catch (error) {
+      console.error('Error saving cart:', error);
+    }
+  };
+
   const addToCart = (product) => {
-    setCartItems((prevCartItems) => {
-      // Check if the product is already in the cart
-      const existingItemIndex = prevCartItems.findIndex(
-        (item) => item.productId === product.productId
-      );
-
-      if (existingItemIndex !== -1) {
-        // Product exists, increment quantity
-        const updatedItems = [...prevCartItems];
-        updatedItems[existingItemIndex] = {
-          ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + 1,
-        };
-        return updatedItems;
+    setCart(prevCart => {
+      const existingItem = prevCart.find(item => item.id === product.id);
+      let newCart;
+      
+      if (existingItem) {
+        newCart = prevCart.map(item =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
       } else {
-        // Product doesn't exist, add it with quantity 1
-        return [...prevCartItems, { ...product, quantity: 1 }];
+        newCart = [...prevCart, { ...product, quantity: 1 }];
       }
+      
+      saveCart(newCart);
+      return newCart;
     });
   };
 
-  // Remove item from cart
   const removeFromCart = (productId) => {
-    setCartItems((prevCartItems) =>
-      prevCartItems.filter((item) => item.productId !== productId)
-    );
+    setCart(prevCart => {
+      const newCart = prevCart.filter(item => item.id !== productId);
+      saveCart(newCart);
+      return newCart;
+    });
   };
 
-  // Update item quantity
   const updateQuantity = (productId, quantity) => {
     if (quantity < 1) {
       removeFromCart(productId);
       return;
     }
 
-    setCartItems((prevCartItems) =>
-      prevCartItems.map((item) =>
-        item.productId === productId ? { ...item, quantity } : item
-      )
-    );
+    setCart(prevCart => {
+      const newCart = prevCart.map(item =>
+        item.id === productId
+          ? { ...item, quantity }
+          : item
+      );
+      saveCart(newCart);
+      return newCart;
+    });
   };
 
-  // Clear the entire cart
   const clearCart = () => {
-    setCartItems([]);
+    setCart([]);
+    saveCart([]);
   };
 
-  // Calculate the total price of items in the cart
   const getCartTotal = () => {
-    return cartItems.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0
-    );
+    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
-  // Get the total number of items in the cart
-  const getItemsCount = () => {
-    return cartItems.reduce((count, item) => count + item.quantity, 0);
+  const getCartItemCount = () => {
+    return cart.reduce((count, item) => count + item.quantity, 0);
+  };
+
+  const value = {
+    cart,
+    loading,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    getCartTotal,
+    getCartItemCount,
   };
 
   return (
-    <CartContext.Provider
-      value={{
-        cartItems,
-        setCartItems,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-        getCartTotal,
-        getItemsCount,
-        loading,
-      }}
-    >
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   );
-}; 
+}
+
+export function useCart() {
+  const context = useContext(CartContext);
+  if (context === undefined) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
+  return context;
+} 
