@@ -1,137 +1,117 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { auth } from '../services/firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
 
 // Import screens
 import LandingScreen from '../screens/LandingScreen';
-import ProductListScreen from '../screens/ProductListScreen';
-import CartScreen from '../screens/CartScreen';
 import SellerDashboardScreen from '../screens/SellerDashboardScreen';
+import SignInScreen from '../screens/SignInScreen';
 import AddProductScreen from '../screens/AddProductScreen';
 import EditProductScreen from '../screens/EditProductScreen';
-import SignInScreen from '../screens/SignInScreen';
-import SignUpScreen from '../screens/SignUpScreen';
+import CreateStoreScreen from '../screens/CreateStoreScreen';
+import ProductListScreen from '../screens/ProductListScreen';
+import CartScreen from '../screens/CartScreen';
+import ProductManagerScreen from '../screens/ProductManagerScreen';
 
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
 
-// Customer Stack
+// Customer stack (public access)
 const CustomerStack = () => (
-  <Stack.Navigator
-    screenOptions={{
-      headerStyle: {
-        backgroundColor: '#fff',
-      },
-      headerShadowVisible: false,
-      headerBackTitleVisible: false,
-    }}
-  >
-    <Stack.Screen
-      name="Landing"
+  <Stack.Navigator>
+    <Stack.Screen 
+      name="Landing" 
       component={LandingScreen}
-      options={{
-        headerShown: false,
-      }}
+      options={{ headerShown: false }}
     />
-    <Stack.Screen
-      name="Product List"
+    <Stack.Screen 
+      name="Product List" 
       component={ProductListScreen}
-      options={({ route }) => ({
-        title: route.params.store.name,
-      })}
+      options={{ title: 'Products' }}
     />
-    <Stack.Screen
-      name="Cart"
+    <Stack.Screen 
+      name="Cart" 
       component={CartScreen}
-      options={{
-        title: 'Shopping Cart',
-      }}
+      options={{ title: 'Shopping Cart' }}
     />
   </Stack.Navigator>
 );
 
-// Seller Stack
-const SellerStack = () => (
-  <Stack.Navigator
-    screenOptions={{
-      headerStyle: {
-        backgroundColor: '#fff',
-      },
-      headerShadowVisible: false,
-      headerBackTitleVisible: false,
-    }}
-  >
-    <Stack.Screen
-      name="Seller Dashboard"
-      component={SellerDashboardScreen}
-      options={{
-        title: 'My Stores',
-      }}
-    />
-    <Stack.Screen
-      name="Add Product"
-      component={AddProductScreen}
-      options={{
-        title: 'Add New Product',
-      }}
-    />
-    <Stack.Screen
-      name="Edit Product"
-      component={EditProductScreen}
-      options={{
-        title: 'Edit Product',
-      }}
-    />
-  </Stack.Navigator>
-);
+// Seller stack (protected)
+const SellerStack = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-// Auth Stack
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  if (isLoading) {
+    return null; // Or a loading screen
+  }
+
+  if (!isAuthenticated) {
+    return null; // This will prevent access to the Seller stack
+  }
+
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="Seller Dashboard" 
+        component={SellerDashboardScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Add Product" 
+        component={AddProductScreen}
+        options={{ title: 'Add New Product' }}
+      />
+      <Stack.Screen 
+        name="Edit Product" 
+        component={EditProductScreen}
+        options={{ title: 'Edit Product' }}
+      />
+      <Stack.Screen 
+        name="Create Store" 
+        component={CreateStoreScreen}
+        options={{ title: 'Create New Store' }}
+      />
+      <Stack.Screen 
+        name="Product Manager" 
+        component={ProductManagerScreen}
+        options={({ route }) => ({ 
+          title: route.params?.storeName || 'Manage Products'
+        })}
+      />
+    </Stack.Navigator>
+  );
+};
+
+// Auth stack
 const AuthStack = () => (
-  <Stack.Navigator
-    screenOptions={{
-      headerStyle: {
-        backgroundColor: '#fff',
-      },
-      headerShadowVisible: false,
-      headerBackTitleVisible: false,
-    }}
-  >
-    <Stack.Screen
-      name="Sign In"
+  <Stack.Navigator>
+    <Stack.Screen 
+      name="Sign In" 
       component={SignInScreen}
-      options={{
-        title: 'Sign In',
-      }}
-    />
-    <Stack.Screen
-      name="Sign Up"
-      component={SignUpScreen}
-      options={{
-        title: 'Create Account',
-      }}
+      options={{ headerShown: false }}
     />
   </Stack.Navigator>
 );
 
-// Main Navigator
+// Main navigator
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        {/* Default to Landing Screen */}
-        <Stack.Screen name="Main" component={CustomerStack} />
-        
-        {/* Auth Stack */}
-        <Stack.Screen name="Auth" component={AuthStack} />
-        
-        {/* Seller Stack */}
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Customer" component={CustomerStack} />
         <Stack.Screen name="Seller" component={SellerStack} />
+        <Stack.Screen name="Auth" component={AuthStack} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,292 +6,220 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  ActivityIndicator,
+  Modal,
+  ScrollView,
   Alert,
-  ScrollView
+  ActivityIndicator
 } from 'react-native';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { ref, deleteObject } from 'firebase/storage';
-import { db, storage, auth } from '../services/firebaseConfig';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../services/firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
-import { getCategoryLabel } from '../constants/categories';
 
 export default function SellerDashboardScreen({ navigation }) {
   const [stores, setStores] = useState([]);
-  const [selectedStore, setSelectedStore] = useState(null);
-  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [selectedStore, setSelectedStore] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  // Listen for auth state changes
   useEffect(() => {
-    fetchStores();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+      if (!user) {
+        console.log('No authenticated user found, redirecting to landing');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Customer' }],
+        });
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
+  // Fetch stores only when authenticated
   useEffect(() => {
-    if (selectedStore) {
-      fetchProducts();
-    } else {
-      setProducts([]);
-    }
-  }, [selectedStore]);
+    if (!isAuthenticated) return;
 
-  const fetchStores = async () => {
-    try {
-      const storesQuery = query(
-        collection(db, 'stores'),
-        where('userId', '==', auth.currentUser.uid)
-      );
-      
-      const storesSnapshot = await getDocs(storesQuery);
-      const storesList = storesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      setStores(storesList);
-      if (storesList.length > 0) {
-        setSelectedStore(storesList[0]);
-      }
-    } catch (error) {
-      console.error('Error fetching stores:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to load stores'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchProducts = async () => {
-    if (!selectedStore) return;
-
-    try {
-      const productsQuery = query(
-        collection(db, 'products'),
-        where('storeId', '==', selectedStore.id)
-      );
-      
-      const productsSnapshot = await getDocs(productsQuery);
-      const productsList = productsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      setProducts(productsList);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to load products'
-      });
-    }
-  };
-
-  const handleDeleteProduct = async (product) => {
-    Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Delete product image from storage
-              if (product.imageUrl) {
-                const imageRef = ref(storage, product.imageUrl);
-                await deleteObject(imageRef);
-              }
-
-              // Delete product document
-              await deleteDoc(doc(db, 'products', product.id));
-
-              // Update local state
-              setProducts(prevProducts => 
-                prevProducts.filter(p => p.id !== product.id)
-              );
-
-              Toast.show({
-                type: 'success',
-                text1: 'Success',
-                text2: 'Product deleted successfully'
-              });
-            } catch (error) {
-              console.error('Error deleting product:', error);
-              Toast.show({
-                type: 'error',
-                text1: 'Error',
-                text2: 'Failed to delete product'
-              });
-            }
-          }
-        }
-      ]
+    const storesQuery = query(
+      collection(db, 'stores'),
+      where('ownerId', '==', auth.currentUser.uid)
     );
+
+    const unsubscribeStores = onSnapshot(storesQuery, (snapshot) => {
+      const storesList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setStores(storesList);
+      setLoading(false);
+    });
+
+    return () => unsubscribeStores();
+  }, [isAuthenticated]);
+
+  const handleAddStore = () => {
+    navigation.navigate('Create Store');
+  };
+
+  const handleAddProduct = () => {
+    if (stores.length === 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'No Stores',
+        text2: 'Please create a store first'
+      });
+      return;
+    }
+
+    if (stores.length === 1) {
+      // If only one store, navigate directly
+      navigation.navigate('Product Manager', {
+        storeId: stores[0].id,
+        storeName: stores[0].storeName
+      });
+    } else {
+      // If multiple stores, show selection modal
+      setShowStoreModal(true);
+    }
+  };
+
+  const handleStoreSelect = (store) => {
+    setShowStoreModal(false);
+    navigation.navigate('Product Manager', {
+      storeId: store.id,
+      storeName: store.storeName
+    });
+  };
+
+  const handleStorePress = (store) => {
+    navigation.navigate('Product Manager', {
+      storeId: store.id,
+      storeName: store.storeName
+    });
   };
 
   const renderStoreItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.storeItem,
-        selectedStore?.id === item.id && styles.selectedStoreItem
-      ]}
-      onPress={() => setSelectedStore(item)}
+    <TouchableOpacity 
+      style={styles.storeCard}
+      onPress={() => handleStorePress(item)}
     >
-      <Image
-        source={{ uri: item.imageUrl || 'https://via.placeholder.com/50' }}
-        style={styles.storeImage}
-      />
+      {item.logoUrl ? (
+        <Image 
+          source={{ uri: item.logoUrl }} 
+          style={styles.storeLogo}
+        />
+      ) : (
+        <View style={styles.storeLogoPlaceholder}>
+          <Ionicons name="storefront" size={32} color="#666" />
+        </View>
+      )}
       <View style={styles.storeInfo}>
-        <Text style={styles.storeName} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={styles.storeCategory}>
-          {getCategoryLabel(item.category || 'Uncategorized')}
-        </Text>
+        <Text style={styles.storeName}>{item.storeName}</Text>
+        <Text style={styles.storeCategory}>{item.category}</Text>
       </View>
+      <Ionicons name="chevron-forward" size={24} color="#666" />
     </TouchableOpacity>
   );
 
-  const renderProductItem = ({ item }) => (
-    <View style={styles.productCard}>
-      <Image
-        source={{ uri: item.imageUrl || 'https://via.placeholder.com/100' }}
-        style={styles.productImage}
-      />
-      <View style={styles.productInfo}>
-        <Text style={styles.productName} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={styles.productPrice}>
-          ${item.price.toFixed(2)}
-        </Text>
-        <Text style={styles.productCategory}>
-          {getCategoryLabel(item.category)}
-        </Text>
-      </View>
-      <View style={styles.productActions}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('Edit Product', { product: item })}
-        >
-          <Ionicons name="pencil" size={20} color="#007AFF" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleDeleteProduct(item)}
-        >
-          <Ionicons name="trash" size={20} color="#FF3B30" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading stores...</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.storesList}
-        contentContainerStyle={styles.storesListContent}
-      >
-        {stores.map(store => (
-          <TouchableOpacity
-            key={store.id}
-            style={[
-              styles.storeItem,
-              selectedStore?.id === store.id && styles.selectedStoreItem
-            ]}
-            onPress={() => setSelectedStore(store)}
-          >
-            <Image
-              source={{ uri: store.imageUrl || 'https://via.placeholder.com/50' }}
-              style={styles.storeImage}
-            />
-            <View style={styles.storeInfo}>
-              <Text style={styles.storeName} numberOfLines={1}>
-                {store.name}
-              </Text>
-              <Text style={styles.storeCategory}>
-                {getCategoryLabel(store.category || 'Uncategorized')}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {selectedStore ? (
-        <>
-          <View style={styles.productsHeader}>
-            <Text style={styles.productsTitle}>
-              Products in {selectedStore.name}
-            </Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => navigation.navigate('Add Product', {
-                storeId: selectedStore.id,
-                storeName: selectedStore.name
-              })}
-            >
-              <Ionicons name="add" size={24} color="#fff" />
-              <Text style={styles.addButtonText}>Add Product</Text>
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={products}
-            renderItem={renderProductItem}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.productsList}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name="cube-outline" size={60} color="#ccc" />
-                <Text style={styles.emptyText}>
-                  No products in this store
-                </Text>
-                <TouchableOpacity
-                  style={styles.addFirstButton}
-                  onPress={() => navigation.navigate('Add Product', {
-                    storeId: selectedStore.id,
-                    storeName: selectedStore.name
-                  })}
-                >
-                  <Text style={styles.addFirstButtonText}>Add Your First Product</Text>
-                </TouchableOpacity>
-              </View>
-            }
-          />
-        </>
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="storefront-outline" size={60} color="#ccc" />
-          <Text style={styles.emptyText}>
-            No stores found
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.header}>
+          <Text style={styles.welcomeText}>
+            Welcome, {auth.currentUser?.email}
           </Text>
-          <TouchableOpacity
-            style={styles.addFirstButton}
-            onPress={() => navigation.navigate('Create Store')}
+          <Text style={styles.subtitle}>Manage your stores and products</Text>
+        </View>
+
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={handleAddStore}
           >
-            <Text style={styles.addFirstButtonText}>Create Your First Store</Text>
+            <Ionicons name="add-circle" size={24} color="#007AFF" />
+            <Text style={styles.actionButtonText}>Add Store</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={handleAddProduct}
+          >
+            <Ionicons name="cart" size={24} color="#007AFF" />
+            <Text style={styles.actionButtonText}>Add Product</Text>
           </TouchableOpacity>
         </View>
-      )}
+
+        <View style={styles.storesSection}>
+          <Text style={styles.sectionTitle}>Your Stores</Text>
+          {stores.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="storefront-outline" size={48} color="#666" />
+              <Text style={styles.emptyStateText}>
+                You haven't created any stores yet
+              </Text>
+              <TouchableOpacity 
+                style={styles.createStoreButton}
+                onPress={handleAddStore}
+              >
+                <Text style={styles.createStoreButtonText}>Create Your First Store</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={stores}
+              renderItem={renderStoreItem}
+              keyExtractor={item => item.id}
+              scrollEnabled={false}
+            />
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Store Selection Modal */}
+      <Modal
+        visible={showStoreModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowStoreModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowStoreModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Store</Text>
+              <TouchableOpacity
+                onPress={() => setShowStoreModal(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            
+            {stores.map((store) => (
+              <TouchableOpacity
+                key={store.id}
+                style={styles.storeOption}
+                onPress={() => handleStoreSelect(store)}
+              >
+                {store.logoUrl && (
+                  <Image 
+                    source={{ uri: store.logoUrl }} 
+                    style={styles.storeOptionLogo}
+                  />
+                )}
+                <Text style={styles.storeOptionName}>{store.storeName}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -299,155 +227,165 @@ export default function SellerDashboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f5f5f5',
   },
-  loadingContainer: {
+  scrollView: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  storesList: {
+  header: {
+    padding: 20,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#eee',
   },
-  storesListContent: {
-    padding: 12,
-  },
-  storeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 12,
-    marginRight: 12,
-    width: 200,
-  },
-  selectedStoreItem: {
-    backgroundColor: '#e3f2fd',
-    borderWidth: 1,
-    borderColor: '#007AFF',
-  },
-  storeImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  storeInfo: {
-    flex: 1,
-  },
-  storeName: {
-    fontSize: 16,
-    fontWeight: '600',
+  welcomeText: {
+    fontSize: 24,
+    fontWeight: 'bold',
     color: '#333',
     marginBottom: 4,
   },
-  storeCategory: {
-    fontSize: 14,
+  subtitle: {
+    fontSize: 16,
     color: '#666',
   },
-  productsHeader: {
+  actionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#eee',
   },
-  productsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  addButton: {
+  actionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    padding: 12,
+    marginHorizontal: 8,
+    backgroundColor: '#f8f8f8',
     borderRadius: 8,
   },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+  actionButtonText: {
     marginLeft: 8,
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '600',
   },
-  productsList: {
+  storesSection: {
     padding: 16,
   },
-  productCard: {
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  storeCard: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
+    padding: 16,
     marginBottom: 12,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
-  productImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
+  storeLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
-  productInfo: {
+  storeLogoPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeInfo: {
     flex: 1,
     marginLeft: 12,
   },
-  productName: {
-    fontSize: 16,
+  storeName: {
+    fontSize: 18,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
   },
-  productPrice: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  productCategory: {
+  storeCategory: {
     fontSize: 14,
     color: '#666',
+    marginTop: 4,
   },
-  productActions: {
-    justifyContent: 'space-between',
-    paddingLeft: 12,
-  },
-  actionButton: {
-    padding: 8,
-  },
-  emptyContainer: {
-    flex: 1,
+  emptyState: {
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+    padding: 32,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginTop: 16,
   },
-  emptyText: {
+  emptyStateText: {
     fontSize: 16,
     color: '#666',
-    marginTop: 12,
+    marginTop: 16,
     marginBottom: 24,
+    textAlign: 'center',
   },
-  addFirstButton: {
+  createStoreButton: {
     backgroundColor: '#007AFF',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
-  addFirstButtonText: {
+  createStoreButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  storeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  storeOptionLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  storeOptionName: {
+    fontSize: 16,
+    color: '#333',
   },
 }); 

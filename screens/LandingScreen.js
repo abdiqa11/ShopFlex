@@ -11,13 +11,18 @@ import {
   Dimensions,
   Modal,
   RefreshControl,
-  ScrollView
+  ScrollView,
+  Alert,
+  Platform
 } from 'react-native';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../services/firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { CATEGORIES, getCategoryLabel } from '../constants/categories';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -56,7 +61,37 @@ const getStoreImage = (store) => {
   return storeLogos.placeholder;
 };
 
-export default function LandingScreen({ navigation }) {
+// Promotional content
+const PROMO_TILES = [
+  {
+    id: 'promo1',
+    title: 'Sell More With ShopFlex',
+    description: 'Create your store in minutes and start selling today',
+    icon: 'trending-up',
+  },
+  {
+    id: 'promo2',
+    title: 'Easy Store Management',
+    description: 'Manage your products and orders from anywhere',
+    icon: 'storefront',
+  },
+  {
+    id: 'promo3',
+    title: 'Reach More Customers',
+    description: 'Get discovered by shoppers looking for your products',
+    icon: 'people',
+  },
+  {
+    id: 'promo4',
+    title: 'Start Your Journey',
+    description: 'Join our growing community of successful sellers',
+    icon: 'rocket',
+  },
+];
+
+export default function LandingScreen() {
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [stores, setStores] = useState([]);
   const [filteredStores, setFilteredStores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +99,17 @@ export default function LandingScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+      console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     fetchStores();
@@ -80,7 +126,8 @@ export default function LandingScreen({ navigation }) {
       const storesSnapshot = await getDocs(storesQuery);
       const storesList = storesSnapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        storeName: doc.data().storeName || doc.data().name || 'Unnamed Store',
       }));
       
       // Log store data for debugging
@@ -123,7 +170,7 @@ export default function LandingScreen({ navigation }) {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(store =>
-        store.name.toLowerCase().includes(query) ||
+        (store.storeName || store.name || '').toLowerCase().includes(query) ||
         store.description?.toLowerCase().includes(query)
       );
     }
@@ -136,12 +183,35 @@ export default function LandingScreen({ navigation }) {
   };
 
   const handleSellerPress = () => {
-    if (auth.currentUser) {
-      navigation.navigate('Seller');
-    } else {
-      navigation.navigate('Auth', { screen: 'Sign In' });
+    if (!isAuthenticated) {
+      // Not authenticated, navigate to Sign In with callback
+      navigation.navigate('Auth', {
+        screen: 'Sign In',
+        params: {
+          onLoginSuccess: () => {
+            // After successful login, navigate to Seller Dashboard
+            navigation.navigate('Seller', {
+              screen: 'Seller Dashboard'
+            });
+          }
+        }
+      });
+      return;
     }
+
+    // Only proceed if authenticated
+    navigation.navigate('Seller', {
+      screen: 'Seller Dashboard'
+    });
   };
+
+  const renderPromoTile = ({ item }) => (
+    <View style={styles.promoTile}>
+      <Ionicons name={item.icon} size={32} color={COLORS.primary} />
+      <Text style={styles.promoTitle}>{item.title}</Text>
+      <Text style={styles.promoDescription}>{item.description}</Text>
+    </View>
+  );
 
   const renderStoreItem = ({ item }) => (
     <TouchableOpacity
@@ -150,12 +220,15 @@ export default function LandingScreen({ navigation }) {
       activeOpacity={0.7}
     >
       <Image
-        source={getStoreImage(item)}
+        source={{ 
+          uri: item.logoUrl || item.imageUrl || 'https://via.placeholder.com/50'
+        }}
         style={styles.storeImage}
+        defaultSource={require('../assets/store-logos/placeholder-store.png')}
       />
       <View style={styles.storeInfo}>
         <Text style={styles.storeName} numberOfLines={1}>
-          {item.name || item.storeName}
+          {item.storeName || item.name || 'Unnamed Store'}
         </Text>
         <View style={styles.storeMeta}>
           <Text style={styles.storeCategory} numberOfLines={1}>
@@ -177,80 +250,76 @@ export default function LandingScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  const renderCategoryModal = () => (
-    <Modal
-      visible={showCategoryModal}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowCategoryModal(false)}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setShowCategoryModal(false)}
-      >
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Category</Text>
-            <TouchableOpacity
-              onPress={() => setShowCategoryModal(false)}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close" size={24} color="#000" />
-            </TouchableOpacity>
-          </View>
-          
-          <TouchableOpacity
-            style={[
-              styles.categoryItem,
-              !selectedCategory && styles.selectedCategory
-            ]}
-            onPress={() => {
-              setSelectedCategory('');
-              setShowCategoryModal(false);
-            }}
-          >
-            <Text style={[
-              styles.categoryItemText,
-              !selectedCategory && styles.selectedCategoryText
-            ]}>
-              All Categories
-            </Text>
-          </TouchableOpacity>
-          
-          {CATEGORIES.map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryItem,
-                selectedCategory === category && styles.selectedCategory
-              ]}
-              onPress={() => {
-                setSelectedCategory(category);
-                setShowCategoryModal(false);
-              }}
-            >
-              <Text style={[
-                styles.categoryItemText,
-                selectedCategory === category && styles.selectedCategoryText
-              ]}>
-                {getCategoryLabel(category)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading stores...</Text>
         </View>
-      </TouchableOpacity>
-    </Modal>
-  );
+      );
+    }
 
-  if (loading) {
+    // If no stores exist, show all promo tiles
+    if (stores.length === 0) {
+      return (
+        <FlatList
+          data={PROMO_TILES}
+          renderItem={renderPromoTile}
+          keyExtractor={item => item.id}
+          numColumns={numColumns}
+          contentContainerStyle={styles.promoList}
+        />
+      );
+    }
+
+    // If stores exist, show stores and remaining promo tiles
+    const remainingPromos = PROMO_TILES.slice(0, Math.max(0, 6 - filteredStores.length));
+    const combinedData = [...filteredStores, ...remainingPromos];
+
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading stores...</Text>
-      </View>
+      <FlatList
+        data={combinedData}
+        renderItem={({ item }) => 
+          item.id?.startsWith('promo') 
+            ? renderPromoTile({ item }) 
+            : renderStoreItem({ item })
+        }
+        keyExtractor={item => item.id}
+        numColumns={numColumns}
+        contentContainerStyle={styles.storesList}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="storefront-outline" size={60} color={COLORS.textSecondary} />
+            <Text style={styles.emptyText}>
+              {searchQuery || selectedCategory
+                ? 'No stores match your search'
+                : 'No stores found'}
+            </Text>
+            {(searchQuery || selectedCategory) && (
+              <TouchableOpacity
+                style={styles.clearFiltersButton}
+                onPress={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('');
+                }}
+              >
+                <Text style={styles.clearFiltersText}>Clear Filters</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        }
+      />
     );
-  }
+  };
 
   return (
     <View style={styles.container}>
@@ -294,54 +363,81 @@ export default function LandingScreen({ navigation }) {
         </Text>
       </View>
 
-      <FlatList
-        data={filteredStores}
-        renderItem={renderStoreItem}
-        keyExtractor={item => item.id}
-        numColumns={numColumns}
-        contentContainerStyle={styles.storesList}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[COLORS.primary]}
-            tintColor={COLORS.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="storefront-outline" size={60} color={COLORS.textSecondary} />
-            <Text style={styles.emptyText}>
-              {searchQuery || selectedCategory
-                ? 'No stores match your search'
-                : 'No stores found'}
-            </Text>
-            {(searchQuery || selectedCategory) && (
-              <TouchableOpacity
-                style={styles.clearFiltersButton}
-                onPress={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('');
-                }}
-              >
-                <Text style={styles.clearFiltersText}>Clear Filters</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        }
-      />
+      {renderContent()}
 
       <TouchableOpacity
-        style={styles.sellerButton}
+        style={[
+          styles.sellerButton,
+          { top: insets.top + 10 }
+        ]}
         onPress={handleSellerPress}
       >
-        <Ionicons name="business" size={20} color="#fff" />
-        <Text style={styles.sellerButtonText}>
-          {auth.currentUser ? 'Seller Dashboard' : 'Seller Login'}
-        </Text>
+        <Ionicons name="storefront" size={32} color={COLORS.primary} />
       </TouchableOpacity>
 
-      {renderCategoryModal()}
+      <Modal
+        visible={showCategoryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Category</Text>
+              <TouchableOpacity
+                onPress={() => setShowCategoryModal(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                styles.categoryItem,
+                !selectedCategory && styles.selectedCategory
+              ]}
+              onPress={() => {
+                setSelectedCategory('');
+                setShowCategoryModal(false);
+              }}
+            >
+              <Text style={[
+                styles.categoryItemText,
+                !selectedCategory && styles.selectedCategoryText
+              ]}>
+                All Categories
+              </Text>
+            </TouchableOpacity>
+            
+            {CATEGORIES.map((category) => (
+              <TouchableOpacity
+                key={category}
+                style={[
+                  styles.categoryItem,
+                  selectedCategory === category && styles.selectedCategory
+                ]}
+                onPress={() => {
+                  setSelectedCategory(category);
+                  setShowCategoryModal(false);
+                }}
+              >
+                <Text style={[
+                  styles.categoryItemText,
+                  selectedCategory === category && styles.selectedCategoryText
+                ]}>
+                  {getCategoryLabel(category)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -502,25 +598,9 @@ const styles = StyleSheet.create({
   },
   sellerButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sellerButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
+    right: 20,
+    zIndex: 1,
+    padding: 8,
   },
   modalOverlay: {
     flex: 1,
@@ -563,5 +643,36 @@ const styles = StyleSheet.create({
   selectedCategoryText: {
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  promoTile: {
+    width: tileSize,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    margin: 6,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  promoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 12,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  promoDescription: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  promoList: {
+    padding: 12,
   },
 }); 

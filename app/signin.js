@@ -36,10 +36,6 @@ export default function SignIn() {
         }
     };
 
-    const handleGoToSignUp = () => {
-        router.push('/signup');
-    };
-
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Sign In</Text>
@@ -71,14 +67,7 @@ export default function SignIn() {
                     </Text>
                 </Pressable>
                 
-                <Pressable 
-                    style={styles.textButton}
-                    onPress={handleGoToSignUp}
-                >
-                    <Text style={styles.textButtonText}>
-                        Don't have an account? <Text style={styles.textButtonHighlight}>Sign Up</Text>
-                    </Text>
-                </Pressable>
+                {/* Sign-up disabled during testing */}
             </View>
         </View>
     );
@@ -87,51 +76,42 @@ export default function SignIn() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        justifyContent: 'center',
         padding: 20,
-        backgroundColor: '#fff',
+        backgroundColor: '#fff'
     },
     title: {
-        fontSize: 32,
+        fontSize: 24,
         fontWeight: 'bold',
         marginBottom: 20,
         textAlign: 'center',
+        marginTop: 40
     },
     form: {
-        gap: 16,
+        width: '100%'
     },
     input: {
+        height: 50,
         borderWidth: 1,
         borderColor: '#ddd',
         borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
+        marginBottom: 15,
+        paddingHorizontal: 10,
+        backgroundColor: '#f9f9f9'
     },
     button: {
-        backgroundColor: '#007AFF',
-        padding: 16,
+        backgroundColor: '#4a80f5',
+        height: 50,
         borderRadius: 8,
+        justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 10,
+        marginTop: 10
     },
     buttonDisabled: {
-        opacity: 0.5,
+        opacity: 0.7
     },
     buttonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
-    },
-    textButton: {
-        padding: 10,
-        alignItems: 'center',
-    },
-    textButtonText: {
-        fontSize: 14,
-        color: '#333',
-    },
-    textButtonHighlight: {
-        color: '#007AFF',
-        fontWeight: '600',
+        fontWeight: '600'
     }
 });
